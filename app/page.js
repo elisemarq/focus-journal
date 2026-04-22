@@ -118,17 +118,17 @@ export default function Home() {
     return (
       <main style={{
         minHeight: "100vh", background: "#0c0c14",
-        color: "#d8d0f0", fontFamily: "monospace",
+        color: "#ede8ff", fontFamily: "monospace",
         padding: "40px 20px", maxWidth: "480px", margin: "0 auto",
       }}>
         <div style={{ marginBottom: "40px" }}>
-          <div style={{ fontSize: "10px", color: "#2a2848", letterSpacing: "3px", marginBottom: "8px" }}>
+          <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "3px", marginBottom: "8px" }}>
             FOCUS JOURNAL
           </div>
           <h1 style={{ margin: "0 0 8px", fontSize: "26px", fontWeight: "normal", color: "#6ee7c7" }}>
             Snap your journal.
           </h1>
-          <p style={{ color: "#3a3858", fontSize: "13px", margin: 0 }}>
+          <p style={{ color: "#7870a8", fontSize: "13px", margin: 0 }}>
             We'll read your handwriting and pull out your day.
           </p>
         </div>
@@ -144,7 +144,7 @@ export default function Home() {
           <div style={{ color: "#6ee7c7", fontSize: "15px", marginBottom: "6px" }}>
             Tap to photograph your journal
           </div>
-          <div style={{ color: "#2a2848", fontSize: "11px" }}>
+          <div style={{ color: "#6860a0", fontSize: "11px" }}>
             or choose an image from your gallery
           </div>
         </label>
@@ -175,7 +175,7 @@ export default function Home() {
         <div style={{ color: "#6ee7c7", fontSize: "14px", marginBottom: "8px" }}>
           {analysing ? "Finding your patterns..." : "Reading your handwriting..."}
         </div>
-        <div style={{ color: "#2a2848", fontSize: "11px" }}>This takes about 10 seconds</div>
+        <div style={{ color: "#6860a0", fontSize: "11px" }}>This takes about 10 seconds</div>
       </main>
     );
   }
@@ -187,12 +187,12 @@ export default function Home() {
     return (
       <main style={{
         minHeight: "100vh", background: "#0c0c14",
-        color: "#d8d0f0", fontFamily: "monospace",
+        color: "#ede8ff", fontFamily: "monospace",
         padding: "32px 20px 100px",
         maxWidth: "480px", margin: "0 auto",
       }}>
         <div style={{ marginBottom: "28px" }}>
-          <div style={{ fontSize: "10px", color: "#2a2848", letterSpacing: "3px", marginBottom: "8px" }}>
+          <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "3px", marginBottom: "8px" }}>
             FOCUS · YOUR DAY
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -208,7 +208,7 @@ export default function Home() {
                 <div style={{ fontSize: "24px", color: scoreColor, fontWeight: "bold" }}>
                   {insights.dayScore.score}
                 </div>
-                <div style={{ fontSize: "9px", color: "#2a2848" }}>/ 10</div>
+                <div style={{ fontSize: "9px", color: "#6860a0" }}>/ 10</div>
               </div>
             )}
           </div>
@@ -241,13 +241,13 @@ export default function Home() {
               <div style={{ fontSize: "18px", color: "#6a6488", fontWeight: "bold" }}>
                 {entries.length - deepCount - interruptCount}
               </div>
-              <div style={{ fontSize: "9px", color: "#3a3858", marginTop: "2px" }}>⚪ neutral</div>
+              <div style={{ fontSize: "9px", color: "#7870a8", marginTop: "2px" }}>⚪ neutral</div>
             </div>
           </div>
 
           {insights.dayScore?.summary && (
             <p style={{
-              margin: "14px 0 0", fontSize: "13px", color: "#7870a0",
+              margin: "14px 0 0", fontSize: "13px", color: "#b8b0e0",
               lineHeight: 1.7, fontStyle: "italic",
             }}>
               {insights.dayScore.summary}
@@ -384,7 +384,7 @@ export default function Home() {
   return (
     <main style={{
       minHeight: "100vh", background: "#0c0c14",
-      color: "#d8d0f0", fontFamily: "monospace",
+      color: "#ede8ff", fontFamily: "monospace",
     }}>
       <div style={{
         padding: "14px 20px",
@@ -393,10 +393,10 @@ export default function Home() {
         display: "flex", justifyContent: "space-between", alignItems: "center",
       }}>
         <div>
-          <div style={{ fontSize: "10px", color: "#2a2848", letterSpacing: "2px", marginBottom: "2px" }}>
+          <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "2px", marginBottom: "2px" }}>
             FOCUS · REVIEW
           </div>
-          <div style={{ fontSize: "12px", color: "#4a4868" }}>
+          <div style={{ fontSize: "12px", color: "#9088b8" }}>
             {entries.length} entries
             {flaggedCount > 0 && (
               <span style={{ color: "#f5c84a", marginLeft: "8px" }}>· {flaggedCount} to check</span>
@@ -415,7 +415,7 @@ export default function Home() {
               transition: "width 0.3s ease",
             }} />
           </div>
-          <span style={{ fontSize: "10px", color: "#3a3858" }}>
+          <span style={{ fontSize: "10px", color: "#7870a8" }}>
             {confirmed.size}/{entries.length}
           </span>
         </div>
@@ -427,9 +427,9 @@ export default function Home() {
         borderBottom: "1px solid rgba(255,255,255,0.04)",
         display: "flex", gap: "14px", alignItems: "center",
       }}>
-        <span style={{ fontSize: "10px", color: "#2a2848", letterSpacing: "1px" }}>TAG EACH ENTRY:</span>
+        <span style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "1px" }}>TAG EACH ENTRY:</span>
         {TAGS.map(t => (
-          <span key={t.id} style={{ fontSize: "11px", color: "#3a3858" }}>
+          <span key={t.id} style={{ fontSize: "11px", color: "#7870a8" }}>
             {t.emoji} {t.label}
           </span>
         ))}
@@ -437,7 +437,7 @@ export default function Home() {
 
       {preview && (
         <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-          <div style={{ fontSize: "10px", color: "#2a2848", letterSpacing: "2px", marginBottom: "8px" }}>
+          <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "2px", marginBottom: "8px" }}>
             YOUR PAGE
           </div>
           <img src={preview} alt="Journal" style={{
@@ -469,7 +469,7 @@ export default function Home() {
           const isConfirmed = confirmed.has(entry.id);
           const isFlagged = entry.confidence === "low" && !isConfirmed;
           const tagColor = entry.tag === "deep" ? "#6ee7c7"
-            : entry.tag === "interrupt" ? "#f57a6a" : "#3a3858";
+            : entry.tag === "interrupt" ? "#f57a6a" : "#7870a8";
 
           return (
             <div key={entry.id} style={{
@@ -517,7 +517,7 @@ export default function Home() {
                       onClick={() => !isEditing && startEdit(entry)}
                       style={{
                         fontSize: "13px", lineHeight: 1.5, cursor: "pointer",
-                        color: isConfirmed ? (entry.tag === "deep" ? "#6ee7c7" : entry.tag === "interrupt" ? "#f57a6a" : "#5a5878") : isFlagged ? "#c8b870" : "#b0a8d0",
+                        color: isConfirmed ? (entry.tag === "deep" ? "#6ee7c7" : entry.tag === "interrupt" ? "#f57a6a" : "#5a5878") : isFlagged ? "#c8b870" : "#d4ceff",
                       }}>
                       {entry.activity}
                     </span>
@@ -538,7 +538,7 @@ export default function Home() {
                         background: "transparent",
                         border: "1px solid rgba(255,255,255,0.08)",
                         borderRadius: "3px", padding: "4px 6px",
-                        fontSize: "11px", color: "#3a3858",
+                        fontSize: "11px", color: "#7870a8",
                         cursor: "pointer", fontFamily: "monospace",
                       }}>esc</button>
                   </div>
