@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const TAGS = [
   { id: "deep", emoji: "🟢", label: "Deep work" },
@@ -7,7 +7,35 @@ const TAGS = [
   { id: "neutral", emoji: "⚪", label: "Neutral" },
 ];
 
+const STEPS = [
+  {
+    icon: "📓",
+    title: "Keep an interstitial journal",
+    description: "Throughout your day, jot down the time and what you're switching to every time your attention shifts. You don't need to be perfect — even rough times work great.",
+    example: null,
+  },
+  {
+    icon: "✍️",
+    title: "Write time + activity",
+    description: "Each entry is just a time and a short description. Write it the moment you switch tasks — before you forget!",
+    example: [
+      "9:00 — emails",
+      "9:45 — working on report",
+      "10:30 — meeting with Sarah",
+      "11:15 — back to report",
+      "12:00 — lunch",
+    ],
+  },
+  {
+    icon: "📸",
+    title: "Snap and analyse",
+    description: "At the end of your day, photograph your journal page. Our AI reads your handwriting and finds patterns in how you spend your time — specific to you, not generic advice.",
+    example: null,
+  },
+];
+
 export default function Home() {
+  const [showGuide, setShowGuide] = useState(null);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [analysing, setAnalysing] = useState(false);
@@ -18,6 +46,22 @@ export default function Home() {
   const [editActivity, setEditActivity] = useState("");
   const [confirmed, setConfirmed] = useState(new Set());
   const [insights, setInsights] = useState(null);
+  const [currentStep, setCurrentStep] = useState(0);
+
+  useEffect(() => {
+    const dismissed = localStorage.getItem("guide-dismissed");
+    setShowGuide(dismissed !== "true");
+  }, []);
+
+  const dismissGuide = () => {
+    localStorage.setItem("guide-dismissed", "true");
+    setShowGuide(false);
+  };
+
+  const reopenGuide = () => {
+    setCurrentStep(0);
+    setShowGuide(true);
+  };
 
   const handlePhoto = async (e) => {
     const file = e.target.files[0];
@@ -86,10 +130,10 @@ export default function Home() {
       const res = await fetch("/api/analyse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-  entries,
-  date: new Date().toISOString().split("T")[0],
-}),
+        body: JSON.stringify({
+          entries,
+          date: new Date().toISOString().split("T")[0],
+        }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -113,49 +157,167 @@ export default function Home() {
   const deepCount = entries.filter(e => e.tag === "deep").length;
   const interruptCount = entries.filter(e => e.tag === "interrupt").length;
 
-  // UPLOAD SCREEN
-  if (!preview && !loading) {
+  // Wait for localStorage check
+  if (showGuide === null) return null;
+
+  // GUIDE SCREEN
+  if (showGuide) {
+    const step = STEPS[currentStep];
+    const isLast = currentStep === STEPS.length - 1;
+
     return (
       <main style={{
         minHeight: "100vh", background: "#0c0c14",
         color: "#ede8ff", fontFamily: "monospace",
         padding: "40px 20px", maxWidth: "480px", margin: "0 auto",
+        display: "flex", flexDirection: "column",
       }}>
-        <div style={{ marginBottom: "40px" }}>
+        {/* Header */}
+        <div style={{ marginBottom: "32px" }}>
           <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "3px", marginBottom: "8px" }}>
-            FOCUS JOURNAL
+            FOCUS JOURNAL · GUIDE
           </div>
-          <h1 style={{ margin: "0 0 8px", fontSize: "26px", fontWeight: "normal", color: "#6ee7c7" }}>
-            Snap your journal.
+          <h1 style={{ margin: 0, fontSize: "24px", fontWeight: "normal", color: "#6ee7c7" }}>
+            How it works
           </h1>
-          <p style={{ color: "#7870a8", fontSize: "13px", margin: 0 }}>
-            We'll read your handwriting and pull out your day.
-          </p>
         </div>
-        <label style={{
-          display: "block", background: "rgba(110,231,199,0.05)",
-          border: "2px dashed rgba(110,231,199,0.25)",
-          borderRadius: "16px", padding: "48px 20px",
-          textAlign: "center", cursor: "pointer",
+
+        {/* Step indicators */}
+        <div style={{ display: "flex", gap: "8px", marginBottom: "32px" }}>
+          {STEPS.map((_, i) => (
+            <div key={i} style={{
+              flex: 1, height: "3px", borderRadius: "2px",
+              background: i <= currentStep
+                ? "#6ee7c7"
+                : "rgba(255,255,255,0.08)",
+              transition: "background 0.3s ease",
+            }} />
+          ))}
+        </div>
+
+        {/* Step card */}
+        <div style={{
+          flex: 1,
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(110,231,199,0.15)",
+          borderRadius: "16px", padding: "28px",
+          marginBottom: "24px",
         }}>
-          <input type="file" accept="image/*" capture="environment"
-            onChange={handlePhoto} style={{ display: "none" }} />
-          <div style={{ fontSize: "48px", marginBottom: "16px" }}>📸</div>
-          <div style={{ color: "#6ee7c7", fontSize: "15px", marginBottom: "6px" }}>
-            Tap to photograph your journal
+          {/* Icon */}
+          <div style={{ fontSize: "56px", marginBottom: "20px", textAlign: "center" }}>
+            {step.icon}
           </div>
-          <div style={{ color: "#6860a0", fontSize: "11px" }}>
-            or choose an image from your gallery
-          </div>
-        </label>
-        {error && (
+
+          {/* Step number */}
           <div style={{
-            marginTop: "20px", background: "rgba(245,122,106,0.1)",
-            border: "1px solid rgba(245,122,106,0.3)",
-            borderRadius: "8px", padding: "14px 16px",
-            color: "#f57a6a", fontSize: "13px",
-          }}>{error}</div>
-        )}
+            fontSize: "10px", color: "#6860a0",
+            letterSpacing: "2px", marginBottom: "8px",
+          }}>
+            STEP {currentStep + 1} OF {STEPS.length}
+          </div>
+
+          {/* Title */}
+          <h2 style={{
+            margin: "0 0 14px", fontSize: "20px",
+            fontWeight: "normal", color: "#ede8ff", lineHeight: 1.3,
+          }}>
+            {step.title}
+          </h2>
+
+          {/* Description */}
+          <p style={{
+            margin: "0 0 20px", fontSize: "14px",
+            color: "#a098c8", lineHeight: 1.8,
+          }}>
+            {step.description}
+          </p>
+
+          {/* Example journal entries */}
+          {step.example && (
+            <div style={{
+              background: "#fdf8f0",
+              borderRadius: "10px", padding: "16px 20px",
+              border: "1px solid rgba(255,255,255,0.1)",
+            }}>
+              <div style={{
+                fontSize: "10px", color: "#9a8a70",
+                letterSpacing: "2px", marginBottom: "10px",
+                fontFamily: "monospace",
+              }}>
+                EXAMPLE PAGE
+              </div>
+              {/* Ruled lines effect */}
+              {step.example.map((entry, i) => (
+                <div key={i} style={{
+                  display: "flex", gap: "12px",
+                  padding: "5px 0",
+                  borderBottom: i < step.example.length - 1
+                    ? "1px solid rgba(180,200,230,0.3)"
+                    : "none",
+                  fontFamily: "'Segoe Script', 'Bradley Hand', cursive",
+                }}>
+                  <span style={{ color: "#9a7060", fontSize: "13px", minWidth: "40px" }}>
+                    {entry.split(" — ")[0]}
+                  </span>
+                  <span style={{ color: "#3a2a20", fontSize: "13px" }}>
+                    {entry.split(" — ")[1]}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Navigation buttons */}
+        <div style={{ display: "flex", gap: "10px" }}>
+          {currentStep > 0 && (
+            <button
+              onClick={() => setCurrentStep(s => s - 1)}
+              style={{
+                flex: 1,
+                background: "transparent",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: "10px", padding: "14px",
+                fontSize: "13px", fontFamily: "monospace",
+                color: "#7870a8", cursor: "pointer",
+                letterSpacing: "1px",
+              }}
+            >
+              ← back
+            </button>
+          )}
+          <button
+            onClick={() => isLast ? dismissGuide() : setCurrentStep(s => s + 1)}
+            style={{
+              flex: 2,
+              background: isLast
+                ? "linear-gradient(135deg, #6ee7c7, #4ab880)"
+                : "rgba(110,231,199,0.1)",
+              border: `1px solid ${isLast ? "transparent" : "rgba(110,231,199,0.3)"}`,
+              borderRadius: "10px", padding: "14px",
+              fontSize: "13px", fontFamily: "monospace",
+              color: isLast ? "#0c0c14" : "#6ee7c7",
+              cursor: "pointer", fontWeight: isLast ? "bold" : "normal",
+              letterSpacing: "1px", transition: "all 0.2s ease",
+            }}
+          >
+            {isLast ? "Got it — let's go! →" : "next →"}
+          </button>
+        </div>
+
+        {/* Skip link */}
+        <button
+          onClick={dismissGuide}
+          style={{
+            background: "none", border: "none",
+            color: "#3a3858", fontSize: "11px",
+            cursor: "pointer", fontFamily: "monospace",
+            letterSpacing: "1px", padding: "12px",
+            marginTop: "4px",
+          }}
+        >
+          skip guide
+        </button>
       </main>
     );
   }
@@ -175,7 +337,9 @@ export default function Home() {
         <div style={{ color: "#6ee7c7", fontSize: "14px", marginBottom: "8px" }}>
           {analysing ? "Finding your patterns..." : "Reading your handwriting..."}
         </div>
-        <div style={{ color: "#6860a0", fontSize: "11px" }}>This takes about 10 seconds</div>
+        <div style={{ color: "#6860a0", fontSize: "11px" }}>
+          This takes about 10 seconds
+        </div>
       </main>
     );
   }
@@ -196,7 +360,7 @@ export default function Home() {
             FOCUS · YOUR DAY
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <h2 style={{ margin: 0, fontSize: "22px", fontWeight: "normal", color: "#e8e0ff" }}>
+            <h2 style={{ margin: 0, fontSize: "22px", fontWeight: "normal", color: "#ede8ff" }}>
               {insights.dayScore?.label || "Today's patterns"}
             </h2>
             {insights.dayScore?.score && (
@@ -213,17 +377,15 @@ export default function Home() {
             )}
           </div>
 
-          {/* User-tagged summary */}
-          <div style={{
-            display: "flex", gap: "8px", marginTop: "14px",
-          }}>
+          {/* Tagged summary */}
+          <div style={{ display: "flex", gap: "8px", marginTop: "14px" }}>
             <div style={{
               flex: 1, background: "rgba(110,231,199,0.06)",
               border: "1px solid rgba(110,231,199,0.15)",
               borderRadius: "8px", padding: "10px", textAlign: "center",
             }}>
               <div style={{ fontSize: "18px", color: "#6ee7c7", fontWeight: "bold" }}>{deepCount}</div>
-              <div style={{ fontSize: "9px", color: "#3a7060", marginTop: "2px" }}>🟢 deep work blocks</div>
+              <div style={{ fontSize: "9px", color: "#3a7060", marginTop: "2px" }}>🟢 deep work</div>
             </div>
             <div style={{
               flex: 1, background: "rgba(245,122,106,0.06)",
@@ -241,7 +403,7 @@ export default function Home() {
               <div style={{ fontSize: "18px", color: "#6a6488", fontWeight: "bold" }}>
                 {entries.length - deepCount - interruptCount}
               </div>
-              <div style={{ fontSize: "9px", color: "#7870a8", marginTop: "2px" }}>⚪ neutral</div>
+              <div style={{ fontSize: "9px", color: "#3a3858", marginTop: "2px" }}>⚪ neutral</div>
             </div>
           </div>
 
@@ -275,10 +437,10 @@ export default function Home() {
                 <div style={{ fontSize: "9px", color: "#3a7060" }}>longest block</div>
               </div>
               <div>
-                <div style={{ fontSize: "13px", color: "#c0b8d8", marginBottom: "4px" }}>
+                <div style={{ fontSize: "13px", color: "#d4ceff", marginBottom: "4px" }}>
                   {insights.focusWindow.start} – {insights.focusWindow.end}
                 </div>
-                <div style={{ fontSize: "12px", color: "#5a5878", lineHeight: 1.5 }}>
+                <div style={{ fontSize: "12px", color: "#a098c8", lineHeight: 1.5 }}>
                   {insights.focusWindow.activity}
                 </div>
               </div>
@@ -364,6 +526,7 @@ export default function Home() {
           background: "rgba(12,12,20,0.95)",
           borderTop: "1px solid rgba(255,255,255,0.06)",
           backdropFilter: "blur(10px)",
+          display: "flex", flexDirection: "column", gap: "8px",
         }}>
           <button onClick={reset} style={{
             width: "100%",
@@ -375,7 +538,70 @@ export default function Home() {
           }}>
             + Log another day
           </button>
+          <button onClick={reopenGuide} style={{
+            background: "none", border: "none",
+            color: "#3a3858", fontSize: "11px",
+            cursor: "pointer", fontFamily: "monospace",
+            letterSpacing: "1px", padding: "4px",
+          }}>
+            ? show guide again
+          </button>
         </div>
+      </main>
+    );
+  }
+
+  // UPLOAD SCREEN
+  if (!preview && !loading) {
+    return (
+      <main style={{
+        minHeight: "100vh", background: "#0c0c14",
+        color: "#ede8ff", fontFamily: "monospace",
+        padding: "40px 20px", maxWidth: "480px", margin: "0 auto",
+      }}>
+        <div style={{ marginBottom: "40px" }}>
+          <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "3px", marginBottom: "8px" }}>
+            FOCUS JOURNAL
+          </div>
+          <h1 style={{ margin: "0 0 8px", fontSize: "26px", fontWeight: "normal", color: "#6ee7c7" }}>
+            Snap your journal.
+          </h1>
+          <p style={{ color: "#7870a8", fontSize: "13px", margin: 0 }}>
+            We'll read your handwriting and pull out your day.
+          </p>
+        </div>
+        <label style={{
+          display: "block", background: "rgba(110,231,199,0.05)",
+          border: "2px dashed rgba(110,231,199,0.25)",
+          borderRadius: "16px", padding: "48px 20px",
+          textAlign: "center", cursor: "pointer",
+        }}>
+          <input type="file" accept="image/*" capture="environment"
+            onChange={handlePhoto} style={{ display: "none" }} />
+          <div style={{ fontSize: "48px", marginBottom: "16px" }}>📸</div>
+          <div style={{ color: "#6ee7c7", fontSize: "15px", marginBottom: "6px" }}>
+            Tap to photograph your journal
+          </div>
+          <div style={{ color: "#6860a0", fontSize: "11px" }}>
+            or choose an image from your gallery
+          </div>
+        </label>
+        <button onClick={reopenGuide} style={{
+          display: "block", margin: "16px auto 0",
+          background: "none", border: "none",
+          color: "#3a3858", fontSize: "11px",
+          cursor: "pointer", fontFamily: "monospace", letterSpacing: "1px",
+        }}>
+          ? show guide
+        </button>
+        {error && (
+          <div style={{
+            marginTop: "20px", background: "rgba(245,122,106,0.1)",
+            border: "1px solid rgba(245,122,106,0.3)",
+            borderRadius: "8px", padding: "14px 16px",
+            color: "#f57a6a", fontSize: "13px",
+          }}>{error}</div>
+        )}
       </main>
     );
   }
@@ -425,9 +651,9 @@ export default function Home() {
       <div style={{
         padding: "10px 20px",
         borderBottom: "1px solid rgba(255,255,255,0.04)",
-        display: "flex", gap: "14px", alignItems: "center",
+        display: "flex", gap: "14px", alignItems: "center", flexWrap: "wrap",
       }}>
-        <span style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "1px" }}>TAG EACH ENTRY:</span>
+        <span style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "1px" }}>TAG:</span>
         {TAGS.map(t => (
           <span key={t.id} style={{ fontSize: "11px", color: "#7870a8" }}>
             {t.emoji} {t.label}
@@ -468,8 +694,6 @@ export default function Home() {
           const isEditing = editingId === entry.id;
           const isConfirmed = confirmed.has(entry.id);
           const isFlagged = entry.confidence === "low" && !isConfirmed;
-          const tagColor = entry.tag === "deep" ? "#6ee7c7"
-            : entry.tag === "interrupt" ? "#f57a6a" : "#7870a8";
 
           return (
             <div key={entry.id} style={{
@@ -477,7 +701,6 @@ export default function Home() {
               borderBottom: "1px solid rgba(255,255,255,0.03)",
               background: isFlagged ? "rgba(245,200,74,0.04)" : "transparent",
             }}>
-              {/* Top row: time + activity */}
               <div style={{ display: "flex", gap: "12px", alignItems: "flex-start", marginBottom: "8px" }}>
                 <div style={{ width: "44px", flexShrink: 0 }}>
                   {isEditing ? (
@@ -492,7 +715,7 @@ export default function Home() {
                   ) : (
                     <span style={{
                       fontSize: "13px",
-                      color: isConfirmed ? tagColor : isFlagged ? "#f5c84a" : "#6a6488",
+                      color: isConfirmed ? "#6ee7c7" : isFlagged ? "#f5c84a" : "#9088b8",
                     }}>{entry.time}</span>
                   )}
                 </div>
@@ -508,16 +731,19 @@ export default function Home() {
                         width: "100%", background: "rgba(255,255,255,0.06)",
                         border: "1px solid rgba(110,231,199,0.4)",
                         borderRadius: "3px", padding: "4px 8px",
-                        color: "#e8e0ff", fontSize: "13px",
+                        color: "#ede8ff", fontSize: "13px",
                         fontFamily: "monospace", outline: "none",
                         boxSizing: "border-box",
                       }} />
                   ) : (
-                    <span
-                      onClick={() => !isEditing && startEdit(entry)}
+                    <span onClick={() => !isEditing && startEdit(entry)}
                       style={{
                         fontSize: "13px", lineHeight: 1.5, cursor: "pointer",
-                        color: isConfirmed ? (entry.tag === "deep" ? "#6ee7c7" : entry.tag === "interrupt" ? "#f57a6a" : "#5a5878") : isFlagged ? "#c8b870" : "#d4ceff",
+                        color: isConfirmed
+                          ? entry.tag === "deep" ? "#6ee7c7"
+                            : entry.tag === "interrupt" ? "#f57a6a"
+                              : "#7870a8"
+                          : isFlagged ? "#c8b870" : "#c8c0f0",
                       }}>
                       {entry.activity}
                     </span>
@@ -543,13 +769,30 @@ export default function Home() {
                       }}>esc</button>
                   </div>
                 )}
+                {!isEditing && (
+                  <div style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>
+                    {isConfirmed ? (
+                      <span style={{ fontSize: "12px", color: "#3a5a48" }}>✓</span>
+                    ) : isFlagged ? (
+                      <button onClick={(e) => { e.stopPropagation(); confirmEntry(entry.id); }}
+                        style={{
+                          background: "rgba(245,200,74,0.1)",
+                          border: "1px solid rgba(245,200,74,0.25)",
+                          borderRadius: "3px", padding: "3px 8px",
+                          fontSize: "10px", color: "#f5c84a",
+                          cursor: "pointer", fontFamily: "monospace",
+                        }}>✓ ok</button>
+                    ) : (
+                      <span style={{ fontSize: "10px", color: "#3a3858" }}>tap</span>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* Tag row */}
+              {/* Tag buttons */}
               <div style={{ display: "flex", gap: "6px", paddingLeft: "56px" }}>
                 {TAGS.map(t => (
-                  <button key={t.id}
-                    onClick={() => setTag(entry.id, t.id)}
+                  <button key={t.id} onClick={() => setTag(entry.id, t.id)}
                     style={{
                       background: entry.tag === t.id
                         ? t.id === "deep" ? "rgba(110,231,199,0.15)"
@@ -568,7 +811,7 @@ export default function Home() {
                         ? t.id === "deep" ? "#6ee7c7"
                           : t.id === "interrupt" ? "#f57a6a"
                             : "#8a8898"
-                        : "#2a2840",
+                        : "#3a3858",
                       transition: "all 0.15s ease",
                     }}>
                     {t.emoji} {t.label}
@@ -581,7 +824,7 @@ export default function Home() {
       </div>
 
       <div style={{
-        position: "fixed", bottom: 0, left: 0, right: 0,
+        position: "sticky", bottom: 0,
         padding: "16px 20px",
         background: "rgba(12,12,20,0.95)",
         borderTop: "1px solid rgba(255,255,255,0.06)",
@@ -597,7 +840,7 @@ export default function Home() {
               : "rgba(255,255,255,0.04)",
             border: "none", borderRadius: "10px", padding: "14px",
             fontSize: "13px", fontFamily: "monospace",
-            color: allConfirmed ? "#0c0c14" : "#2a2840",
+            color: allConfirmed ? "#0c0c14" : "#3a3858",
             cursor: allConfirmed ? "pointer" : "default",
             fontWeight: "bold", letterSpacing: "1px",
             transition: "all 0.2s ease",
@@ -609,7 +852,7 @@ export default function Home() {
         <button onClick={reset} style={{
           width: "100%", marginTop: "8px",
           background: "transparent", border: "none",
-          color: "#2a2840", fontSize: "11px",
+          color: "#3a3858", fontSize: "11px",
           cursor: "pointer", fontFamily: "monospace",
           letterSpacing: "1px", padding: "6px",
         }}>↺ retake photo</button>
