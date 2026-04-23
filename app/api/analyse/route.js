@@ -12,20 +12,25 @@ const supabase = createClient(
 
 export async function POST(request) {
   try {
-    const { entries, date } = await request.json();
+    const { entries, date, goals } = await request.json();
 
     const entriesText = entries
       .map(e => `${e.time} — ${e.activity} [${e.tag}]`)
       .join("\n");
 
+    const goalsText = goals && goals.filter(g => g).length > 0
+      ? `\nThe user set these goals for today:\n${goals.filter(g => g).map((g, i) => `${i + 1}. ${g}`).join("\n")}\n`
+      : "";
+
     console.log("Analysing entries:", entriesText);
+    console.log("Goals:", goalsText);
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         {
           role: "user",
-          content: `You are an ADHD productivity coach analysing an interstitial journal.
+          content: `You are a warm, encouraging ADHD productivity coach analysing an interstitial journal.
 
 The user has tagged each entry as one of:
 - [deep] = intentional focused work
@@ -34,10 +39,12 @@ The user has tagged each entry as one of:
 
 Entries with tags:
 ${entriesText}
-
+${goalsText}
 Use the tags as ground truth — do not override what the user has told you.
 ONLY reference times and activities explicitly in the entries above.
 Never invent data not present in the entries.
+
+${goals && goals.filter(g => g).length > 0 ? `For each goal, check if there is evidence in the entries that it was worked on or completed. Be generous and warm — if there is any related activity, mark it as partial. Use encouraging language always.` : ""}
 
 Return ONLY raw JSON, no backticks:
 {
@@ -62,7 +69,14 @@ Return ONLY raw JSON, no backticks:
     "score": number 1-10 based on ratio of deep to interrupt blocks,
     "label": "two or three word label",
     "summary": "two warm specific sentences referencing their actual tagged entries"
-  }
+  }${goals && goals.filter(g => g).length > 0 ? `,
+  "goalReview": [
+    ${goals.filter(g => g).map(g => `{
+      "goal": "${g}",
+      "status": "complete|partial|not_yet",
+      "message": "one warm encouraging sentence about this goal — celebrate if done, encourage if not"
+    }`).join(",\n    ")}
+  ]` : ""}
 }`,
         },
       ],
@@ -79,10 +93,7 @@ Return ONLY raw JSON, no backticks:
 
     const insights = JSON.parse(jsonMatch[0]);
 
-    // Save to database
-    console.log("Saving to database...");
-
-    // 1. Save the journal day
+    // Save journal day
     const { data: dayData, error: dayError } = await supabase
       .from("journal_days")
       .insert({
@@ -96,11 +107,10 @@ Return ONLY raw JSON, no backticks:
 
     if (dayError) {
       console.error("Error saving day:", dayError);
-      // Still return insights even if save fails
       return Response.json({ insights, saved: false });
     }
 
-    // 2. Save all entries
+    // Save entries
     const entryRows = entries.map(e => ({
       journal_day_id: dayData.id,
       time: e.time,
@@ -109,17 +119,20 @@ Return ONLY raw JSON, no backticks:
       confidence: e.confidence || "high",
     }));
 
-    const { error: entriesError } = await supabase
-      .from("journal_entries")
-      .insert(entryRows);
+    await supabase.from("journal_entries").insert(entryRows);
 
-    if (entriesError) {
-      console.error("Error saving entries:", entriesError);
-      return Response.json({ insights, saved: false });
+    // Save goals if any
+    if (goals && goals.filter(g => g).length > 0) {
+      await supabase.from("journal_goals").insert({
+        date: date || new Date().toISOString().split("T")[0],
+        goal_1: goals[0] || null,
+        goal_2: goals[1] || null,
+        goal_3: goals[2] || null,
+      });
     }
 
-    console.log("Saved successfully! Day ID:", dayData.id);
-    return Response.json({ insights, saved: true, dayId: dayData.id });
+    console.log("Saved successfully!");
+    return Response.json({ insights, saved: true });
 
   } catch (error) {
     console.error("Analyse error:", error.message);

@@ -34,8 +34,16 @@ const STEPS = [
   },
 ];
 
+const STATUS_CONFIG = {
+  complete: { emoji: "✅", color: "#6ee7c7", label: "Done!" },
+  partial: { emoji: "🔶", color: "#f5d06a", label: "Partial" },
+  not_yet: { emoji: "💙", color: "#a098c8", label: "Next time" },
+};
+
 export default function Home() {
   const [showGuide, setShowGuide] = useState(null);
+  const [screen, setScreen] = useState("upload");
+  const [goals, setGoals] = useState(["", "", ""]);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [analysing, setAnalysing] = useState(false);
@@ -87,6 +95,7 @@ export default function Home() {
           ...e, id: i, tag: "neutral",
           confidence: e.time.includes("?") || e.activity.includes("[?]") ? "low" : "high",
         })));
+        setScreen("correction");
       } catch (err) {
         setError("Something went wrong — try again!");
         setPreview(null);
@@ -133,11 +142,13 @@ export default function Home() {
         body: JSON.stringify({
           entries,
           date: new Date().toISOString().split("T")[0],
+          goals: goals.filter(g => g.trim()),
         }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setInsights(data.insights);
+      setScreen("insights");
     } catch (err) {
       setError("Couldn't analyse — try again!");
     }
@@ -150,21 +161,22 @@ export default function Home() {
     setConfirmed(new Set());
     setInsights(null);
     setError(null);
+    setGoals(["", "", ""]);
+    setScreen("upload");
   };
 
   const flaggedCount = entries.filter(e => e.confidence === "low" && !confirmed.has(e.id)).length;
   const allConfirmed = entries.length > 0 && entries.every(e => confirmed.has(e.id));
   const deepCount = entries.filter(e => e.tag === "deep").length;
   const interruptCount = entries.filter(e => e.tag === "interrupt").length;
+  const hasGoals = goals.some(g => g.trim());
 
-  // Wait for localStorage check
   if (showGuide === null) return null;
 
   // GUIDE SCREEN
   if (showGuide) {
     const step = STEPS[currentStep];
     const isLast = currentStep === STEPS.length - 1;
-
     return (
       <main style={{
         minHeight: "100vh", background: "#0c0c14",
@@ -172,7 +184,6 @@ export default function Home() {
         padding: "40px 20px", maxWidth: "480px", margin: "0 auto",
         display: "flex", flexDirection: "column",
       }}>
-        {/* Header */}
         <div style={{ marginBottom: "32px" }}>
           <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "3px", marginBottom: "8px" }}>
             FOCUS JOURNAL · GUIDE
@@ -181,79 +192,44 @@ export default function Home() {
             How it works
           </h1>
         </div>
-
-        {/* Step indicators */}
         <div style={{ display: "flex", gap: "8px", marginBottom: "32px" }}>
           {STEPS.map((_, i) => (
             <div key={i} style={{
               flex: 1, height: "3px", borderRadius: "2px",
-              background: i <= currentStep
-                ? "#6ee7c7"
-                : "rgba(255,255,255,0.08)",
+              background: i <= currentStep ? "#6ee7c7" : "rgba(255,255,255,0.08)",
               transition: "background 0.3s ease",
             }} />
           ))}
         </div>
-
-        {/* Step card */}
         <div style={{
-          flex: 1,
-          background: "rgba(255,255,255,0.03)",
+          flex: 1, background: "rgba(255,255,255,0.03)",
           border: "1px solid rgba(110,231,199,0.15)",
-          borderRadius: "16px", padding: "28px",
-          marginBottom: "24px",
+          borderRadius: "16px", padding: "28px", marginBottom: "24px",
         }}>
-          {/* Icon */}
           <div style={{ fontSize: "56px", marginBottom: "20px", textAlign: "center" }}>
             {step.icon}
           </div>
-
-          {/* Step number */}
-          <div style={{
-            fontSize: "10px", color: "#6860a0",
-            letterSpacing: "2px", marginBottom: "8px",
-          }}>
+          <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "2px", marginBottom: "8px" }}>
             STEP {currentStep + 1} OF {STEPS.length}
           </div>
-
-          {/* Title */}
-          <h2 style={{
-            margin: "0 0 14px", fontSize: "20px",
-            fontWeight: "normal", color: "#ede8ff", lineHeight: 1.3,
-          }}>
+          <h2 style={{ margin: "0 0 14px", fontSize: "20px", fontWeight: "normal", color: "#ede8ff", lineHeight: 1.3 }}>
             {step.title}
           </h2>
-
-          {/* Description */}
-          <p style={{
-            margin: "0 0 20px", fontSize: "14px",
-            color: "#a098c8", lineHeight: 1.8,
-          }}>
+          <p style={{ margin: "0 0 20px", fontSize: "14px", color: "#a098c8", lineHeight: 1.8 }}>
             {step.description}
           </p>
-
-          {/* Example journal entries */}
           {step.example && (
             <div style={{
-              background: "#fdf8f0",
-              borderRadius: "10px", padding: "16px 20px",
-              border: "1px solid rgba(255,255,255,0.1)",
+              background: "#fdf8f0", borderRadius: "10px",
+              padding: "16px 20px", border: "1px solid rgba(255,255,255,0.1)",
             }}>
-              <div style={{
-                fontSize: "10px", color: "#9a8a70",
-                letterSpacing: "2px", marginBottom: "10px",
-                fontFamily: "monospace",
-              }}>
+              <div style={{ fontSize: "10px", color: "#9a8a70", letterSpacing: "2px", marginBottom: "10px", fontFamily: "monospace" }}>
                 EXAMPLE PAGE
               </div>
-              {/* Ruled lines effect */}
               {step.example.map((entry, i) => (
                 <div key={i} style={{
-                  display: "flex", gap: "12px",
-                  padding: "5px 0",
-                  borderBottom: i < step.example.length - 1
-                    ? "1px solid rgba(180,200,230,0.3)"
-                    : "none",
+                  display: "flex", gap: "12px", padding: "5px 0",
+                  borderBottom: i < step.example.length - 1 ? "1px solid rgba(180,200,230,0.3)" : "none",
                   fontFamily: "'Segoe Script', 'Bradley Hand', cursive",
                 }}>
                   <span style={{ color: "#9a7060", fontSize: "13px", minWidth: "40px" }}>
@@ -267,57 +243,36 @@ export default function Home() {
             </div>
           )}
         </div>
-
-        {/* Navigation buttons */}
         <div style={{ display: "flex", gap: "10px" }}>
           {currentStep > 0 && (
-            <button
-              onClick={() => setCurrentStep(s => s - 1)}
-              style={{
-                flex: 1,
-                background: "transparent",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: "10px", padding: "14px",
-                fontSize: "13px", fontFamily: "monospace",
-                color: "#7870a8", cursor: "pointer",
-                letterSpacing: "1px",
-              }}
-            >
-              ← back
-            </button>
+            <button onClick={() => setCurrentStep(s => s - 1)} style={{
+              flex: 1, background: "transparent",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: "10px", padding: "14px",
+              fontSize: "13px", fontFamily: "monospace",
+              color: "#7870a8", cursor: "pointer", letterSpacing: "1px",
+            }}>← back</button>
           )}
           <button
             onClick={() => isLast ? dismissGuide() : setCurrentStep(s => s + 1)}
             style={{
               flex: 2,
-              background: isLast
-                ? "linear-gradient(135deg, #6ee7c7, #4ab880)"
-                : "rgba(110,231,199,0.1)",
+              background: isLast ? "linear-gradient(135deg, #6ee7c7, #4ab880)" : "rgba(110,231,199,0.1)",
               border: `1px solid ${isLast ? "transparent" : "rgba(110,231,199,0.3)"}`,
               borderRadius: "10px", padding: "14px",
               fontSize: "13px", fontFamily: "monospace",
               color: isLast ? "#0c0c14" : "#6ee7c7",
               cursor: "pointer", fontWeight: isLast ? "bold" : "normal",
-              letterSpacing: "1px", transition: "all 0.2s ease",
-            }}
-          >
+              letterSpacing: "1px",
+            }}>
             {isLast ? "Got it — let's go! →" : "next →"}
           </button>
         </div>
-
-        {/* Skip link */}
-        <button
-          onClick={dismissGuide}
-          style={{
-            background: "none", border: "none",
-            color: "#3a3858", fontSize: "11px",
-            cursor: "pointer", fontFamily: "monospace",
-            letterSpacing: "1px", padding: "12px",
-            marginTop: "4px",
-          }}
-        >
-          skip guide
-        </button>
+        <button onClick={dismissGuide} style={{
+          background: "none", border: "none", color: "#3a3858",
+          fontSize: "11px", cursor: "pointer", fontFamily: "monospace",
+          letterSpacing: "1px", padding: "12px", marginTop: "4px",
+        }}>skip guide</button>
       </main>
     );
   }
@@ -337,22 +292,105 @@ export default function Home() {
         <div style={{ color: "#6ee7c7", fontSize: "14px", marginBottom: "8px" }}>
           {analysing ? "Finding your patterns..." : "Reading your handwriting..."}
         </div>
-        <div style={{ color: "#6860a0", fontSize: "11px" }}>
-          This takes about 10 seconds
+        <div style={{ color: "#6860a0", fontSize: "11px" }}>This takes about 10 seconds</div>
+      </main>
+    );
+  }
+
+  // GOALS SCREEN
+  if (screen === "goals") {
+    return (
+      <main style={{
+        minHeight: "100vh", background: "#0c0c14",
+        color: "#ede8ff", fontFamily: "monospace",
+        padding: "40px 20px", maxWidth: "480px", margin: "0 auto",
+        display: "flex", flexDirection: "column",
+      }}>
+        <div style={{ marginBottom: "32px" }}>
+          <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "3px", marginBottom: "8px" }}>
+            FOCUS JOURNAL · TODAY'S GOALS
+          </div>
+          <h1 style={{ margin: "0 0 8px", fontSize: "24px", fontWeight: "normal", color: "#6ee7c7" }}>
+            What do you need to do today?
+          </h1>
+          <p style={{ color: "#7870a8", fontSize: "13px", margin: 0, lineHeight: 1.6 }}>
+            Add up to 3 goals. At the end of the day your journal review will check how you did — warmly, not judgmentally.
+          </p>
+        </div>
+
+        <div style={{ flex: 1 }}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} style={{ marginBottom: "16px" }}>
+              <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "2px", marginBottom: "8px" }}>
+                GOAL {i + 1} {i > 0 ? "(optional)" : ""}
+              </div>
+              <input
+                value={goals[i]}
+                onChange={e => {
+                  const newGoals = [...goals];
+                  newGoals[i] = e.target.value;
+                  setGoals(newGoals);
+                }}
+                placeholder={
+                  i === 0 ? "e.g. Finish the project proposal" :
+                  i === 1 ? "e.g. Reply to all urgent emails" :
+                  "e.g. Take a proper lunch break"
+                }
+                style={{
+                  width: "100%", boxSizing: "border-box",
+                  background: "rgba(255,255,255,0.04)",
+                  border: goals[i]
+                    ? "1px solid rgba(110,231,199,0.4)"
+                    : "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: "10px", padding: "14px 16px",
+                  color: "#ede8ff", fontSize: "14px",
+                  fontFamily: "monospace", outline: "none",
+                  transition: "border 0.2s ease",
+                }}
+              />
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "24px" }}>
+          <button
+            onClick={() => setScreen("upload")}
+            style={{
+              width: "100%",
+              background: hasGoals
+                ? "linear-gradient(135deg, #6ee7c7, #4ab880)"
+                : "rgba(110,231,199,0.08)",
+              border: `1px solid ${hasGoals ? "transparent" : "rgba(110,231,199,0.2)"}`,
+              borderRadius: "10px", padding: "14px",
+              fontSize: "13px", fontFamily: "monospace",
+              color: hasGoals ? "#0c0c14" : "#6ee7c7",
+              cursor: "pointer", fontWeight: hasGoals ? "bold" : "normal",
+              letterSpacing: "1px",
+            }}>
+            {hasGoals ? "Goals set — now snap your journal →" : "Skip for now →"}
+          </button>
+          <button onClick={() => setScreen("upload")} style={{
+            background: "none", border: "none",
+            color: "#3a3858", fontSize: "11px",
+            cursor: "pointer", fontFamily: "monospace",
+            letterSpacing: "1px", padding: "6px", textAlign: "center",
+          }}>
+            ← back
+          </button>
         </div>
       </main>
     );
   }
 
   // INSIGHTS SCREEN
-  if (insights) {
+  if (screen === "insights" && insights) {
     const scoreColor = insights.dayScore?.score >= 7 ? "#6ee7c7"
       : insights.dayScore?.score >= 5 ? "#f5d06a" : "#f5a97f";
     return (
       <main style={{
         minHeight: "100vh", background: "#0c0c14",
         color: "#ede8ff", fontFamily: "monospace",
-        padding: "32px 20px 100px",
+        padding: "32px 20px 120px",
         maxWidth: "480px", margin: "0 auto",
       }}>
         <div style={{ marginBottom: "28px" }}>
@@ -408,14 +446,46 @@ export default function Home() {
           </div>
 
           {insights.dayScore?.summary && (
-            <p style={{
-              margin: "14px 0 0", fontSize: "13px", color: "#b8b0e0",
-              lineHeight: 1.7, fontStyle: "italic",
-            }}>
+            <p style={{ margin: "14px 0 0", fontSize: "13px", color: "#b8b0e0", lineHeight: 1.7, fontStyle: "italic" }}>
               {insights.dayScore.summary}
             </p>
           )}
         </div>
+
+        {/* Goals Review */}
+        {insights.goalReview && insights.goalReview.length > 0 && (
+          <div style={{
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: "12px", padding: "20px", marginBottom: "14px",
+          }}>
+            <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "2px", marginBottom: "14px" }}>
+              🎯 TODAY'S GOALS
+            </div>
+            {insights.goalReview.map((g, i) => {
+              const config = STATUS_CONFIG[g.status] || STATUS_CONFIG.not_yet;
+              return (
+                <div key={i} style={{
+                  padding: "12px 0",
+                  borderBottom: i < insights.goalReview.length - 1
+                    ? "1px solid rgba(255,255,255,0.05)" : "none",
+                }}>
+                  <div style={{ display: "flex", gap: "10px", alignItems: "flex-start", marginBottom: "6px" }}>
+                    <span style={{ fontSize: "16px", flexShrink: 0 }}>{config.emoji}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: "13px", color: "#ede8ff", marginBottom: "4px" }}>
+                        {g.goal}
+                      </div>
+                      <div style={{ fontSize: "11px", color: config.color, lineHeight: 1.5 }}>
+                        {g.message}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {insights.focusWindow && (
           <div style={{
@@ -538,44 +608,34 @@ export default function Home() {
           }}>
             + Log another day
           </button>
+          <a href="https://ko-fi.com/focusjournal" target="_blank" rel="noopener noreferrer" style={{
+            display: "block", textAlign: "center", padding: "8px",
+            fontSize: "12px", color: "#f5d06a", fontFamily: "monospace",
+            letterSpacing: "1px", textDecoration: "none", opacity: 0.8,
+          }}>
+            ☕ buy me a coffee
+          </a>
           <button onClick={reopenGuide} style={{
-            background: "none", border: "none",
-            color: "#3a3858", fontSize: "11px",
-            cursor: "pointer", fontFamily: "monospace",
+            background: "none", border: "none", color: "#3a3858",
+            fontSize: "11px", cursor: "pointer", fontFamily: "monospace",
             letterSpacing: "1px", padding: "4px",
           }}>
             ? show guide again
           </button>
-          <a href="https://ko-fi.com/focusjournal"
-  target="_blank"
-  rel="noopener noreferrer"
-  style={{
-    display: "block",
-    textAlign: "center",
-    padding: "8px",
-    fontSize: "12px",
-    color: "#f5d06a",
-    fontFamily: "monospace",
-    letterSpacing: "1px",
-    textDecoration: "none",
-       opacity: 0.8,
-  }}>
-  ☕ buy me a coffee
-</a>
         </div>
       </main>
     );
   }
 
   // UPLOAD SCREEN
-  if (!preview && !loading) {
+  if (screen === "upload") {
     return (
       <main style={{
         minHeight: "100vh", background: "#0c0c14",
         color: "#ede8ff", fontFamily: "monospace",
         padding: "40px 20px", maxWidth: "480px", margin: "0 auto",
       }}>
-        <div style={{ marginBottom: "40px" }}>
+        <div style={{ marginBottom: "32px" }}>
           <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "3px", marginBottom: "8px" }}>
             FOCUS JOURNAL
           </div>
@@ -586,10 +646,51 @@ export default function Home() {
             We'll read your handwriting and pull out your day.
           </p>
         </div>
+
+        {/* Goals summary if set */}
+        {hasGoals && (
+          <div style={{
+            background: "rgba(110,231,199,0.06)",
+            border: "1px solid rgba(110,231,199,0.15)",
+            borderRadius: "10px", padding: "14px 16px",
+            marginBottom: "20px",
+          }}>
+            <div style={{ fontSize: "10px", color: "#3a7060", letterSpacing: "2px", marginBottom: "8px" }}>
+              🎯 TODAY'S GOALS
+            </div>
+            {goals.filter(g => g.trim()).map((g, i) => (
+              <div key={i} style={{ fontSize: "12px", color: "#a098c8", marginBottom: "4px" }}>
+                · {g}
+              </div>
+            ))}
+            <button onClick={() => setScreen("goals")} style={{
+              background: "none", border: "none", color: "#6860a0",
+              fontSize: "10px", cursor: "pointer", fontFamily: "monospace",
+              letterSpacing: "1px", padding: "4px 0 0", display: "block",
+            }}>
+              edit goals
+            </button>
+          </div>
+        )}
+
+        {/* Set goals button */}
+        {!hasGoals && (
+          <button onClick={() => setScreen("goals")} style={{
+            width: "100%", marginBottom: "16px",
+            background: "rgba(110,231,199,0.06)",
+            border: "1px dashed rgba(110,231,199,0.2)",
+            borderRadius: "10px", padding: "14px",
+            color: "#6ee7c7", fontSize: "13px",
+            cursor: "pointer", fontFamily: "monospace", letterSpacing: "1px",
+          }}>
+            🎯 Set today's goals (optional)
+          </button>
+        )}
+
         <label style={{
           display: "block", background: "rgba(110,231,199,0.05)",
           border: "2px dashed rgba(110,231,199,0.25)",
-          borderRadius: "16px", padding: "48px 20px",
+          borderRadius: "16px", padding: "40px 20px",
           textAlign: "center", cursor: "pointer",
         }}>
           <input type="file" accept="image/*" capture="environment"
@@ -602,30 +703,18 @@ export default function Home() {
             or choose an image from your gallery
           </div>
         </label>
-        <button onClick={reopenGuide} style={{
-          display: "block", margin: "16px auto 0",
-          background: "none", border: "none",
-          color: "#3a3858", fontSize: "11px",
-          cursor: "pointer", fontFamily: "monospace", letterSpacing: "1px",
-        }}>
-          <a href="https://ko-fi.com/focusjournal"
-  target="_blank"
-  rel="noopener noreferrer"
-  style={{
-    display: "block",
-    textAlign: "center",
-    padding: "8px",
-    fontSize: "12px",
-    color: "#f5d06a",
-    fontFamily: "monospace",
-    letterSpacing: "1px",
-    textDecoration: "none",
-       opacity: 0.8,
-  }}>
-  ☕ buy me a coffee
-</a>
-          ? show guide
-        </button>
+
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: "16px" }}>
+          <button onClick={reopenGuide} style={{
+            background: "none", border: "none", color: "#3a3858",
+            fontSize: "11px", cursor: "pointer", fontFamily: "monospace", letterSpacing: "1px",
+          }}>? show guide</button>
+          <a href="https://ko-fi.com/focusjournal" target="_blank" rel="noopener noreferrer" style={{
+            fontSize: "11px", color: "#f5d06a", fontFamily: "monospace",
+            letterSpacing: "1px", textDecoration: "none", opacity: 0.7,
+          }}>☕ ko-fi</a>
+        </div>
+
         {error && (
           <div style={{
             marginTop: "20px", background: "rgba(245,122,106,0.1)",
@@ -679,7 +768,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Tag legend */}
       <div style={{
         padding: "10px 20px",
         borderBottom: "1px solid rgba(255,255,255,0.04)",
@@ -726,7 +814,6 @@ export default function Home() {
           const isEditing = editingId === entry.id;
           const isConfirmed = confirmed.has(entry.id);
           const isFlagged = entry.confidence === "low" && !isConfirmed;
-
           return (
             <div key={entry.id} style={{
               padding: "10px 20px",
@@ -781,6 +868,24 @@ export default function Home() {
                     </span>
                   )}
                 </div>
+                {!isEditing && (
+                  <div style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>
+                    {isConfirmed ? (
+                      <span style={{ fontSize: "12px", color: "#3a5a48" }}>✓</span>
+                    ) : isFlagged ? (
+                      <button onClick={(e) => { e.stopPropagation(); confirmEntry(entry.id); }}
+                        style={{
+                          background: "rgba(245,200,74,0.1)",
+                          border: "1px solid rgba(245,200,74,0.25)",
+                          borderRadius: "3px", padding: "3px 8px",
+                          fontSize: "10px", color: "#f5c84a",
+                          cursor: "pointer", fontFamily: "monospace",
+                        }}>✓ ok</button>
+                    ) : (
+                      <span style={{ fontSize: "10px", color: "#3a3858" }}>tap</span>
+                    )}
+                  </div>
+                )}
                 {isEditing && (
                   <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
                     <button onClick={(e) => { e.stopPropagation(); saveEdit(entry.id); }}
@@ -799,24 +904,6 @@ export default function Home() {
                         fontSize: "11px", color: "#7870a8",
                         cursor: "pointer", fontFamily: "monospace",
                       }}>esc</button>
-                  </div>
-                )}
-                {!isEditing && (
-                  <div style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>
-                    {isConfirmed ? (
-                      <span style={{ fontSize: "12px", color: "#3a5a48" }}>✓</span>
-                    ) : isFlagged ? (
-                      <button onClick={(e) => { e.stopPropagation(); confirmEntry(entry.id); }}
-                        style={{
-                          background: "rgba(245,200,74,0.1)",
-                          border: "1px solid rgba(245,200,74,0.25)",
-                          borderRadius: "3px", padding: "3px 8px",
-                          fontSize: "10px", color: "#f5c84a",
-                          cursor: "pointer", fontFamily: "monospace",
-                        }}>✓ ok</button>
-                    ) : (
-                      <span style={{ fontSize: "10px", color: "#3a3858" }}>tap</span>
-                    )}
                   </div>
                 )}
               </div>
