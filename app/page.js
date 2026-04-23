@@ -546,6 +546,22 @@ export default function Home() {
           }}>
             ? show guide again
           </button>
+          <a href="https://ko-fi.com/focusjournal"
+  target="_blank"
+  rel="noopener noreferrer"
+  style={{
+    display: "block",
+    textAlign: "center",
+    padding: "8px",
+    fontSize: "12px",
+    color: "#f5d06a",
+    fontFamily: "monospace",
+    letterSpacing: "1px",
+    textDecoration: "none",
+       opacity: 0.8,
+  }}>
+  ☕ buy me a coffee
+</a>
         </div>
       </main>
     );
@@ -592,6 +608,22 @@ export default function Home() {
           color: "#3a3858", fontSize: "11px",
           cursor: "pointer", fontFamily: "monospace", letterSpacing: "1px",
         }}>
+          <a href="https://ko-fi.com/focusjournal"
+  target="_blank"
+  rel="noopener noreferrer"
+  style={{
+    display: "block",
+    textAlign: "center",
+    padding: "8px",
+    fontSize: "12px",
+    color: "#f5d06a",
+    fontFamily: "monospace",
+    letterSpacing: "1px",
+    textDecoration: "none",
+       opacity: 0.8,
+  }}>
+  ☕ buy me a coffee
+</a>
           ? show guide
         </button>
         {error && (
