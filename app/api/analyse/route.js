@@ -44,7 +44,7 @@ Use the tags as ground truth — do not override what the user has told you.
 ONLY reference times and activities explicitly in the entries above.
 Never invent data not present in the entries.
 
-${goals && goals.filter(g => g).length > 0 ? `For each goal, check if there is evidence in the entries that it was worked on or completed. Be generous and warm — if there is any related activity, mark it as partial. Use encouraging language always.` : ""}
+${goals && goals.filter(g => g).length > 0 ? `For each goal, return it in goalResults with status "pending" — the user will mark goals complete themselves.` : ""}
 
 Return ONLY raw JSON, no backticks:
 {

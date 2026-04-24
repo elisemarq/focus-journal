@@ -660,9 +660,71 @@ const carryForward = (goal) => {
           backdropFilter: "blur(10px)",
           display: "flex", flexDirection: "column", gap: "8px",
         }}>
-  {/* Carry forward prompt */}
+{/* Goals — user marks complete */}
+        {insights.goalResults && insights.goalResults.length > 0 && (
+          <div style={{
+            background: "rgba(255,255,255,0.02)",
+            border: "1px solid rgba(255,255,255,0.07)",
+            borderRadius: "12px", padding: "20px",
+            marginBottom: "14px",
+          }}>
+            <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "2px", marginBottom: "6px" }}>
+              🎯 TODAY'S GOALS
+            </div>
+            <p style={{ margin: "0 0 14px", fontSize: "11px", color: "#3a3858", fontFamily: "monospace" }}>
+              tap to mark complete
+            </p>
+            {insights.goalResults.map((result, i) => {
+              const isDone = completedGoals.has(result.goal);
+              return (
+                <div key={i} style={{
+                  marginBottom: i < insights.goalResults.length - 1 ? "10px" : 0,
+                  paddingBottom: i < insights.goalResults.length - 1 ? "10px" : 0,
+                  borderBottom: i < insights.goalResults.length - 1
+                    ? "1px solid rgba(255,255,255,0.04)" : "none",
+                }}>
+                  <div
+                    onClick={() => toggleGoalComplete(result.goal)}
+                    style={{
+                      display: "flex", gap: "12px", alignItems: "flex-start",
+                      cursor: "pointer",
+                    }}>
+                    <div style={{
+                      width: "20px", height: "20px", borderRadius: "6px",
+                      border: `2px solid ${isDone ? "#6ee7c7" : "rgba(255,255,255,0.15)"}`,
+                      background: isDone ? "rgba(110,231,199,0.15)" : "transparent",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      flexShrink: 0, marginTop: "1px",
+                      transition: "all 0.2s ease",
+                    }}>
+                      {isDone && <span style={{ color: "#6ee7c7", fontSize: "12px" }}>✓</span>}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{
+                        fontSize: "13px",
+                        color: isDone ? "#6ee7c7" : "#c8c0f0",
+                        textDecoration: isDone ? "line-through" : "none",
+                        opacity: isDone ? 0.7 : 1,
+                        marginBottom: "3px",
+                        transition: "all 0.2s ease",
+                      }}>
+                        {result.goal}
+                      </div>
+                      {isDone
+                        ? <div style={{ fontSize: "11px", color: "#6ee7c7", opacity: 0.6 }}>Nice work! 🌿</div>
+                        : result.note && <div style={{ fontSize: "11px", color: "#7870a8", lineHeight: 1.5 }}>{result.note}</div>
+                      }
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Carry forward prompt — based on user's own completions */}
         {insights.goalResults && insights.goalResults.some(r =>
-          r.status === "incomplete" || r.status === "partial"
+          !completedGoals.has(r.goal)
         ) && (
           <div style={{
             background: "rgba(160,152,200,0.08)",
@@ -677,7 +739,7 @@ const carryForward = (goal) => {
               These didn't quite make it today — want to try again tomorrow?
             </p>
             {insights.goalResults
-              .filter(r => r.status === "incomplete" || r.status === "partial")
+              .filter(r => !completedGoals.has(r.goal))
               .map((result, i) => {
                 const alreadyCarried = carriedGoals.includes(result.goal);
                 return (
@@ -687,7 +749,7 @@ const carryForward = (goal) => {
                     marginBottom: "8px",
                   }}>
                     <span style={{ fontSize: "12px", color: "#c8c0f0", flex: 1 }}>
-                      {result.status === "partial" ? "🔶" : "💙"} {result.goal}
+                      💙 {result.goal}
                     </span>
                     <button
                       onClick={() => alreadyCarried
