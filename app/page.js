@@ -55,10 +55,33 @@ export default function Home() {
   const [confirmed, setConfirmed] = useState(new Set());
   const [insights, setInsights] = useState(null);
   const [currentStep, setCurrentStep] = useState(0);
+  const [carriedGoals, setCarriedGoals] = useState([]);
 
   useEffect(() => {
     const dismissed = localStorage.getItem("guide-dismissed");
     setShowGuide(dismissed !== "true");
+
+    // Load any carried goals from yesterday
+    const saved = localStorage.getItem("carried-goals");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split("T")[0];
+
+      // Only load if they were saved yesterday or today
+      if (parsed.date === yesterdayStr || parsed.date === new Date().toISOString().split("T")[0]) {
+        setCarriedGoals(parsed.goals || []);
+        setGoals(prev => {
+          const merged = [...parsed.goals];
+          while (merged.length < 3) merged.push("");
+          return merged;
+        });
+      } else {
+        // Expired — clear them
+        localStorage.removeItem("carried-goals");
+      }
+    }
   }, []);
 
   const dismissGuide = () => {
@@ -154,7 +177,28 @@ export default function Home() {
     }
     setAnalysing(false);
   };
+const carryForward = (goal) => {
+    const existing = JSON.parse(localStorage.getItem("carried-goals") || '{"goals":[]}');
+    const updatedGoals = [...new Set([...existing.goals, goal])].slice(0, 3);
+    localStorage.setItem("carried-goals", JSON.stringify({
+      goals: updatedGoals,
+      date: new Date().toISOString().split("T")[0],
+    }));
+    setCarriedGoals(updatedGoals);
+  };
 
+  const removeCarriedGoal = (goal) => {
+    const updated = carriedGoals.filter(g => g !== goal);
+    setCarriedGoals(updated);
+    if (updated.length === 0) {
+      localStorage.removeItem("carried-goals");
+    } else {
+      localStorage.setItem("carried-goals", JSON.stringify({
+        goals: updated,
+        date: new Date().toISOString().split("T")[0],
+      }));
+    }
+  };
   const reset = () => {
     setPreview(null);
     setEntries([]);
@@ -313,9 +357,27 @@ export default function Home() {
           <h1 style={{ margin: "0 0 8px", fontSize: "24px", fontWeight: "normal", color: "#6ee7c7" }}>
             What do you need to do today?
           </h1>
-          <p style={{ color: "#7870a8", fontSize: "13px", margin: 0, lineHeight: 1.6 }}>
-            Add up to 3 goals. At the end of the day your journal review will check how you did — warmly, not judgmentally.
+        <p style={{ margin: 0, fontSize: "13px", color: "#7870a8", lineHeight: 1.6 }}>
+            Set up to 3 goals. At the end of the day, we'll check how you did — no judgment, just clarity.
           </p>
+          {carriedGoals.length > 0 && (
+          <div style={{
+            marginTop: "16px",
+            background: "rgba(110,231,199,0.06)",
+            border: "1px solid rgba(110,231,199,0.2)",
+            borderRadius: "10px", padding: "12px 16px",
+          }}>
+            <div style={{ fontSize: "10px", color: "#3a7060", letterSpacing: "2px", marginBottom: "6px" }}>
+              🔁 CARRIED OVER FROM YESTERDAY
+            </div>
+            {carriedGoals.map((g, i) => (
+              <div key={i} style={{ fontSize: "12px", color: "#a098c8", marginBottom: "3px", display: "flex", gap: "8px" }}>
+                <span style={{ color: "#6ee7c7" }}>→</span>
+                <span>{g}</span>
+              </div>
+            ))}
+          </div>
+        )}
         </div>
 
         <div style={{ flex: 1 }}>
@@ -598,6 +660,70 @@ export default function Home() {
           backdropFilter: "blur(10px)",
           display: "flex", flexDirection: "column", gap: "8px",
         }}>
+  {/* Carry forward prompt */}
+        {insights.goalResults && insights.goalResults.some(r =>
+          r.status === "incomplete" || r.status === "partial"
+        ) && (
+          <div style={{
+            background: "rgba(160,152,200,0.08)",
+            border: "1px solid rgba(160,152,200,0.2)",
+            borderRadius: "12px", padding: "16px 20px",
+            marginBottom: "14px",
+          }}>
+            <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "2px", marginBottom: "10px" }}>
+              🔁 CARRY FORWARD?
+            </div>
+            <p style={{ margin: "0 0 12px", fontSize: "13px", color: "#a098c8", lineHeight: 1.6 }}>
+              These didn't quite make it today — want to try again tomorrow?
+            </p>
+            {insights.goalResults
+              .filter(r => r.status === "incomplete" || r.status === "partial")
+              .map((result, i) => {
+                const alreadyCarried = carriedGoals.includes(result.goal);
+                return (
+                  <div key={i} style={{
+                    display: "flex", justifyContent: "space-between",
+                    alignItems: "center", gap: "10px",
+                    marginBottom: "8px",
+                  }}>
+                    <span style={{ fontSize: "12px", color: "#c8c0f0", flex: 1 }}>
+                      {result.status === "partial" ? "🔶" : "💙"} {result.goal}
+                    </span>
+                    <button
+                      onClick={() => alreadyCarried
+                        ? removeCarriedGoal(result.goal)
+                        : carryForward(result.goal)
+                      }
+                      style={{
+                        background: alreadyCarried
+                          ? "rgba(110,231,199,0.15)"
+                          : "rgba(160,152,200,0.1)",
+                        border: `1px solid ${alreadyCarried
+                          ? "rgba(110,231,199,0.4)"
+                          : "rgba(160,152,200,0.25)"}`,
+                        borderRadius: "20px", padding: "4px 12px",
+                        fontSize: "11px", fontFamily: "monospace",
+                        color: alreadyCarried ? "#6ee7c7" : "#a098c8",
+                        cursor: "pointer", flexShrink: 0,
+                        transition: "all 0.15s ease",
+                        whiteSpace: "nowrap",
+                      }}>
+                      {alreadyCarried ? "✓ added" : "+ tomorrow"}
+                    </button>
+                  </div>
+                );
+              })}
+          </div>
+        )}
+
+        <div style={{
+          position: "fixed", bottom: 0, left: 0, right: 0,
+          padding: "16px 20px",
+          background: "rgba(12,12,20,0.95)",
+          borderTop: "1px solid rgba(255,255,255,0.06)",
+          backdropFilter: "blur(10px)",
+          display: "flex", flexDirection: "column", gap: "8px",
+        }}>
           <button onClick={reset} style={{
             width: "100%",
             background: "rgba(110,231,199,0.08)",
@@ -605,23 +731,20 @@ export default function Home() {
             borderRadius: "10px", padding: "13px",
             color: "#6ee7c7", fontSize: "12px",
             cursor: "pointer", fontFamily: "monospace", letterSpacing: "1px",
-          }}>
-            + Log another day
+          }}>            + Log another day
           </button>
           <a href="https://ko-fi.com/focusjournal" target="_blank" rel="noopener noreferrer" style={{
             display: "block", textAlign: "center", padding: "8px",
             fontSize: "12px", color: "#f5d06a", fontFamily: "monospace",
             letterSpacing: "1px", textDecoration: "none", opacity: 0.8,
-          }}>
-            ☕ buy me a coffee
-          </a>
+          }}>☕ buy me a coffee</a>
           <button onClick={reopenGuide} style={{
-            background: "none", border: "none", color: "#3a3858",
-            fontSize: "11px", cursor: "pointer", fontFamily: "monospace",
+            background: "none", border: "none",
+            color: "#3a3858", fontSize: "11px",
+            cursor: "pointer", fontFamily: "monospace",
             letterSpacing: "1px", padding: "4px",
-          }}>
-            ? show guide again
-          </button>
+          }}>? show guide again</button>
+        </div>
         </div>
       </main>
     );
