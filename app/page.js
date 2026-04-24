@@ -56,6 +56,7 @@ export default function Home() {
   const [insights, setInsights] = useState(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [carriedGoals, setCarriedGoals] = useState([]);
+  const [completedGoals, setCompletedGoals] = useState(new Set());
 
   useEffect(() => {
     const dismissed = localStorage.getItem("guide-dismissed");
@@ -176,6 +177,13 @@ export default function Home() {
       setError("Couldn't analyse — try again!");
     }
     setAnalysing(false);
+  };
+  const toggleGoalComplete = (goal) => {
+    setCompletedGoals(prev => {
+      const next = new Set(prev);
+      next.has(goal) ? next.delete(goal) : next.add(goal);
+      return next;
+    });
   };
 const carryForward = (goal) => {
     const existing = JSON.parse(localStorage.getItem("carried-goals") || '{"goals":[]}');

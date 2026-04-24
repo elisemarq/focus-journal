@@ -70,11 +70,11 @@ Return ONLY raw JSON, no backticks:
     "label": "two or three word label",
     "summary": "two warm specific sentences referencing their actual tagged entries"
   }${goals && goals.filter(g => g).length > 0 ? `,
-  "goalReview": [
+  "goalResults": [
     ${goals.filter(g => g).map(g => `{
       "goal": "${g}",
-      "status": "complete|partial|not_yet",
-      "message": "one warm encouraging sentence about this goal — celebrate if done, encourage if not"
+      "status": "pending",
+      "note": "one short warm encouraging sentence about this goal"
     }`).join(",\n    ")}
   ]` : ""}
 }`,
