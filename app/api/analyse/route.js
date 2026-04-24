@@ -19,18 +19,24 @@ export async function POST(request) {
       .join("\n");
 
     const goalsText = goals && goals.filter(g => g).length > 0
-      ? `\nThe user set these goals for today:\n${goals.filter(g => g).map((g, i) => `${i + 1}. ${g}`).join("\n")}\n`
-      : "";
+      ? goals.filter(g => g).map((g, i) => `${i + 1}. ${g}`).join("\n")
+      : null;
 
     console.log("Analysing entries:", entriesText);
     console.log("Goals:", goalsText);
+
+    const goalResultsFormat = goalsText
+      ? `"goalResults": [${goals.filter(g => g).map(g =>
+          `{"goal": "${g}", "status": "pending", "note": "one short warm encouraging sentence about this goal"}`
+        ).join(", ")}]`
+      : `"goalResults": []`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         {
           role: "user",
-          content: `You are a warm, encouraging ADHD productivity coach analysing an interstitial journal.
+          content: `You are an ADHD productivity coach analysing an interstitial journal.
 
 The user has tagged each entry as one of:
 - [deep] = intentional focused work
@@ -39,12 +45,12 @@ The user has tagged each entry as one of:
 
 Entries with tags:
 ${entriesText}
-${goalsText}
+
+${goalsText ? `The user set these goals for today — do NOT judge if they were completed, just return them with status "pending" and a warm encouraging note:\n${goalsText}` : ""}
+
 Use the tags as ground truth — do not override what the user has told you.
 ONLY reference times and activities explicitly in the entries above.
 Never invent data not present in the entries.
-
-${goals && goals.filter(g => g).length > 0 ? `For each goal, return it in goalResults with status "pending" — the user will mark goals complete themselves.` : ""}
 
 Return ONLY raw JSON, no backticks:
 {
@@ -69,18 +75,12 @@ Return ONLY raw JSON, no backticks:
     "score": number 1-10 based on ratio of deep to interrupt blocks,
     "label": "two or three word label",
     "summary": "two warm specific sentences referencing their actual tagged entries"
-  }${goals && goals.filter(g => g).length > 0 ? `,
-  "goalResults": [
-    ${goals.filter(g => g).map(g => `{
-      "goal": "${g}",
-      "status": "pending",
-      "note": "one short warm encouraging sentence about this goal"
-    }`).join(",\n    ")}
-  ]` : ""}
+  },
+  ${goalResultsFormat}
 }`,
         },
       ],
-      max_tokens: 1000,
+      max_tokens: 1200,
     });
 
     const text = response.choices[0].message.content;
@@ -93,7 +93,7 @@ Return ONLY raw JSON, no backticks:
 
     const insights = JSON.parse(jsonMatch[0]);
 
-    // Save journal day
+    // Save to database
     const { data: dayData, error: dayError } = await supabase
       .from("journal_days")
       .insert({
@@ -101,6 +101,12 @@ Return ONLY raw JSON, no backticks:
         day_score: insights.dayScore?.score || null,
         day_label: insights.dayScore?.label || null,
         day_summary: insights.dayScore?.summary || null,
+        goal_1: goals?.[0] || null,
+        goal_2: goals?.[1] || null,
+        goal_3: goals?.[2] || null,
+        goal_1_status: "pending",
+        goal_2_status: "pending",
+        goal_3_status: "pending",
       })
       .select()
       .single();
@@ -110,7 +116,6 @@ Return ONLY raw JSON, no backticks:
       return Response.json({ insights, saved: false });
     }
 
-    // Save entries
     const entryRows = entries.map(e => ({
       journal_day_id: dayData.id,
       time: e.time,
@@ -119,20 +124,17 @@ Return ONLY raw JSON, no backticks:
       confidence: e.confidence || "high",
     }));
 
-    await supabase.from("journal_entries").insert(entryRows);
+    const { error: entriesError } = await supabase
+      .from("journal_entries")
+      .insert(entryRows);
 
-    // Save goals if any
-    if (goals && goals.filter(g => g).length > 0) {
-      await supabase.from("journal_goals").insert({
-        date: date || new Date().toISOString().split("T")[0],
-        goal_1: goals[0] || null,
-        goal_2: goals[1] || null,
-        goal_3: goals[2] || null,
-      });
+    if (entriesError) {
+      console.error("Error saving entries:", entriesError);
+      return Response.json({ insights, saved: false });
     }
 
-    console.log("Saved successfully!");
-    return Response.json({ insights, saved: true });
+    console.log("Saved successfully! Day ID:", dayData.id);
+    return Response.json({ insights, saved: true, dayId: dayData.id });
 
   } catch (error) {
     console.error("Analyse error:", error.message);
