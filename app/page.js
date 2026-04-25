@@ -178,7 +178,7 @@ export default function Home() {
     }
     setAnalysing(false);
   };
-  const toggleGoalComplete = (goal) => {
+    const toggleGoalComplete = (goal) => {
     setCompletedGoals(prev => {
       const next = new Set(prev);
       next.has(goal) ? next.delete(goal) : next.add(goal);
