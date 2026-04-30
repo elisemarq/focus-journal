@@ -18,18 +18,7 @@ export async function POST(request) {
       .map(e => `${e.time} — ${e.activity} [${e.tag}]`)
       .join("\n");
 
-    const goalsText = goals && goals.filter(g => g).length > 0
-      ? goals.filter(g => g).map((g, i) => `${i + 1}. ${g}`).join("\n")
-      : null;
-
     console.log("Analysing entries:", entriesText);
-    console.log("Goals:", goalsText);
-
-    const goalResultsFormat = goalsText
-      ? `"goalResults": [${goals.filter(g => g).map(g =>
-          `{"goal": "${g}", "status": "pending", "note": "one short warm encouraging sentence about this goal"}`
-        ).join(", ")}]`
-      : `"goalResults": []`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -45,8 +34,6 @@ The user has tagged each entry as one of:
 
 Entries with tags:
 ${entriesText}
-
-${goalsText ? `The user set these goals for today — do NOT judge if they were completed, just return them with status "pending" and a warm encouraging note:\n${goalsText}` : ""}
 
 Use the tags as ground truth — do not override what the user has told you.
 ONLY reference times and activities explicitly in the entries above.
@@ -75,12 +62,11 @@ Return ONLY raw JSON, no backticks:
     "score": number 1-10 based on ratio of deep to interrupt blocks,
     "label": "two or three word label",
     "summary": "two warm specific sentences referencing their actual tagged entries"
-  },
-  ${goalResultsFormat}
+  }
 }`,
         },
       ],
-      max_tokens: 1200,
+      max_tokens: 1000,
     });
 
     const text = response.choices[0].message.content;
@@ -133,7 +119,7 @@ Return ONLY raw JSON, no backticks:
       return Response.json({ insights, saved: false });
     }
 
-    console.log("Saved successfully! Day ID:", dayData.id);
+    console.log("Saved successfully!");
     return Response.json({ insights, saved: true, dayId: dayData.id });
 
   } catch (error) {

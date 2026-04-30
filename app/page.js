@@ -34,16 +34,12 @@ const STEPS = [
   },
 ];
 
-const STATUS_CONFIG = {
-  complete: { emoji: "✅", color: "#6ee7c7", label: "Done!" },
-  partial: { emoji: "🔶", color: "#f5d06a", label: "Partial" },
-  not_yet: { emoji: "💙", color: "#a098c8", label: "Next time" },
-};
-
 export default function Home() {
   const [showGuide, setShowGuide] = useState(null);
   const [screen, setScreen] = useState("upload");
   const [goals, setGoals] = useState(["", "", ""]);
+  const [completedGoals, setCompletedGoals] = useState(new Set());
+  const [carriedGoals, setCarriedGoals] = useState([]);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [analysing, setAnalysing] = useState(false);
@@ -55,31 +51,29 @@ export default function Home() {
   const [confirmed, setConfirmed] = useState(new Set());
   const [insights, setInsights] = useState(null);
   const [currentStep, setCurrentStep] = useState(0);
-  const [carriedGoals, setCarriedGoals] = useState([]);
-  const [completedGoals, setCompletedGoals] = useState(new Set());
 
   useEffect(() => {
     const dismissed = localStorage.getItem("guide-dismissed");
     setShowGuide(dismissed !== "true");
-
-    // Load any carried goals from yesterday
     const saved = localStorage.getItem("carried-goals");
     if (saved) {
-      const parsed = JSON.parse(saved);
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split("T")[0];
-
-      // Only load if they were saved yesterday or today
-      if (parsed.date === yesterdayStr || parsed.date === new Date().toISOString().split("T")[0]) {
-        setCarriedGoals(parsed.goals || []);
-        setGoals(prev => {
-          const merged = [...parsed.goals];
-          while (merged.length < 3) merged.push("");
-          return merged;
-        });
-      } else {
-        // Expired — clear them
+      try {
+        const parsed = JSON.parse(saved);
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split("T")[0];
+        const todayStr = new Date().toISOString().split("T")[0];
+        if (parsed.date === yesterdayStr || parsed.date === todayStr) {
+          setCarriedGoals(parsed.goals || []);
+          setGoals(prev => {
+            const merged = [...parsed.goals];
+            while (merged.length < 3) merged.push("");
+            return merged;
+          });
+        } else {
+          localStorage.removeItem("carried-goals");
+        }
+      } catch (e) {
         localStorage.removeItem("carried-goals");
       }
     }
@@ -119,7 +113,6 @@ export default function Home() {
           ...e, id: i, tag: "neutral",
           confidence: e.time.includes("?") || e.activity.includes("[?]") ? "low" : "high",
         })));
-        setScreen("correction");
       } catch (err) {
         setError("Something went wrong — try again!");
         setPreview(null);
@@ -172,20 +165,13 @@ export default function Home() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setInsights(data.insights);
-      setScreen("insights");
     } catch (err) {
       setError("Couldn't analyse — try again!");
     }
     setAnalysing(false);
   };
-    const toggleGoalComplete = (goal) => {
-    setCompletedGoals(prev => {
-      const next = new Set(prev);
-      next.has(goal) ? next.delete(goal) : next.add(goal);
-      return next;
-    });
-  };
-const carryForward = (goal) => {
+
+  const carryForward = (goal) => {
     const existing = JSON.parse(localStorage.getItem("carried-goals") || '{"goals":[]}');
     const updatedGoals = [...new Set([...existing.goals, goal])].slice(0, 3);
     localStorage.setItem("carried-goals", JSON.stringify({
@@ -207,6 +193,7 @@ const carryForward = (goal) => {
       }));
     }
   };
+
   const reset = () => {
     setPreview(null);
     setEntries([]);
@@ -215,6 +202,7 @@ const carryForward = (goal) => {
     setError(null);
     setGoals(["", "", ""]);
     setScreen("upload");
+    setCompletedGoals(new Set());
   };
 
   const flaggedCount = entries.filter(e => e.confidence === "low" && !confirmed.has(e.id)).length;
@@ -271,10 +259,7 @@ const carryForward = (goal) => {
             {step.description}
           </p>
           {step.example && (
-            <div style={{
-              background: "#fdf8f0", borderRadius: "10px",
-              padding: "16px 20px", border: "1px solid rgba(255,255,255,0.1)",
-            }}>
+            <div style={{ background: "#fdf8f0", borderRadius: "10px", padding: "16px 20px" }}>
               <div style={{ fontSize: "10px", color: "#9a8a70", letterSpacing: "2px", marginBottom: "10px", fontFamily: "monospace" }}>
                 EXAMPLE PAGE
               </div>
@@ -315,14 +300,15 @@ const carryForward = (goal) => {
               fontSize: "13px", fontFamily: "monospace",
               color: isLast ? "#0c0c14" : "#6ee7c7",
               cursor: "pointer", fontWeight: isLast ? "bold" : "normal",
-              letterSpacing: "1px",
+              letterSpacing: "1px", transition: "all 0.2s ease",
             }}>
             {isLast ? "Got it — let's go! →" : "next →"}
           </button>
         </div>
         <button onClick={dismissGuide} style={{
-          background: "none", border: "none", color: "#3a3858",
-          fontSize: "11px", cursor: "pointer", fontFamily: "monospace",
+          background: "none", border: "none",
+          color: "#3a3858", fontSize: "11px",
+          cursor: "pointer", fontFamily: "monospace",
           letterSpacing: "1px", padding: "12px", marginTop: "4px",
         }}>skip guide</button>
       </main>
@@ -363,34 +349,39 @@ const carryForward = (goal) => {
             FOCUS JOURNAL · TODAY'S GOALS
           </div>
           <h1 style={{ margin: "0 0 8px", fontSize: "24px", fontWeight: "normal", color: "#6ee7c7" }}>
-            What do you need to do today?
+            What do you need<br />to do today?
           </h1>
-        <p style={{ margin: 0, fontSize: "13px", color: "#7870a8", lineHeight: 1.6 }}>
-            Set up to 3 goals. At the end of the day, we'll check how you did — no judgment, just clarity.
+          <p style={{ margin: 0, fontSize: "13px", color: "#7870a8", lineHeight: 1.6 }}>
+            Set up to 3 goals. At the end of the day, you decide if they're done — no judgment, just clarity.
           </p>
           {carriedGoals.length > 0 && (
-          <div style={{
-            marginTop: "16px",
-            background: "rgba(110,231,199,0.06)",
-            border: "1px solid rgba(110,231,199,0.2)",
-            borderRadius: "10px", padding: "12px 16px",
-          }}>
-            <div style={{ fontSize: "10px", color: "#3a7060", letterSpacing: "2px", marginBottom: "6px" }}>
-              🔁 CARRIED OVER FROM YESTERDAY
-            </div>
-            {carriedGoals.map((g, i) => (
-              <div key={i} style={{ fontSize: "12px", color: "#a098c8", marginBottom: "3px", display: "flex", gap: "8px" }}>
-                <span style={{ color: "#6ee7c7" }}>→</span>
-                <span>{g}</span>
+            <div style={{
+              marginTop: "16px",
+              background: "rgba(110,231,199,0.06)",
+              border: "1px solid rgba(110,231,199,0.2)",
+              borderRadius: "10px", padding: "12px 16px",
+            }}>
+              <div style={{ fontSize: "10px", color: "#3a7060", letterSpacing: "2px", marginBottom: "6px" }}>
+                🔁 CARRIED OVER FROM YESTERDAY
               </div>
-            ))}
-          </div>
-        )}
+              {carriedGoals.map((g, i) => (
+                <div key={i} style={{ fontSize: "12px", color: "#a098c8", marginBottom: "3px", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#6ee7c7" }}>→</span>
+                  <span>{g}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "14px", marginBottom: "32px" }}>
           {[0, 1, 2].map((i) => (
-            <div key={i} style={{ marginBottom: "16px" }}>
+            <div key={i} style={{
+              background: "rgba(255,255,255,0.03)",
+              border: `1px solid ${goals[i] ? "rgba(110,231,199,0.3)" : "rgba(255,255,255,0.06)"}`,
+              borderRadius: "12px", padding: "16px 20px",
+              transition: "border-color 0.2s ease",
+            }}>
               <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "2px", marginBottom: "8px" }}>
                 GOAL {i + 1} {i > 0 ? "(optional)" : ""}
               </div>
@@ -403,57 +394,52 @@ const carryForward = (goal) => {
                 }}
                 placeholder={
                   i === 0 ? "e.g. Finish the project proposal" :
-                  i === 1 ? "e.g. Reply to all urgent emails" :
+                  i === 1 ? "e.g. Reply to all pending emails" :
                   "e.g. Take a proper lunch break"
                 }
                 style={{
-                  width: "100%", boxSizing: "border-box",
-                  background: "rgba(255,255,255,0.04)",
-                  border: goals[i]
-                    ? "1px solid rgba(110,231,199,0.4)"
-                    : "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: "10px", padding: "14px 16px",
+                  width: "100%", background: "transparent",
+                  border: "none", outline: "none",
                   color: "#ede8ff", fontSize: "14px",
-                  fontFamily: "monospace", outline: "none",
-                  transition: "border 0.2s ease",
+                  fontFamily: "monospace", lineHeight: 1.5,
+                  boxSizing: "border-box", caretColor: "#6ee7c7",
                 }}
               />
             </div>
           ))}
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "24px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           <button
             onClick={() => setScreen("upload")}
+            disabled={!goals[0].trim()}
             style={{
               width: "100%",
-              background: hasGoals
+              background: goals[0].trim()
                 ? "linear-gradient(135deg, #6ee7c7, #4ab880)"
-                : "rgba(110,231,199,0.08)",
-              border: `1px solid ${hasGoals ? "transparent" : "rgba(110,231,199,0.2)"}`,
-              borderRadius: "10px", padding: "14px",
+                : "rgba(255,255,255,0.04)",
+              border: "none", borderRadius: "10px", padding: "14px",
               fontSize: "13px", fontFamily: "monospace",
-              color: hasGoals ? "#0c0c14" : "#6ee7c7",
-              cursor: "pointer", fontWeight: hasGoals ? "bold" : "normal",
-              letterSpacing: "1px",
+              color: goals[0].trim() ? "#0c0c14" : "#3a3858",
+              cursor: goals[0].trim() ? "pointer" : "default",
+              fontWeight: "bold", letterSpacing: "1px",
+              transition: "all 0.2s ease",
             }}>
-            {hasGoals ? "Goals set — now snap your journal →" : "Skip for now →"}
+            {goals[0].trim() ? "Save goals → snap journal" : "Enter at least one goal"}
           </button>
-          <button onClick={() => setScreen("upload")} style={{
+          <button onClick={() => { setGoals(["", "", ""]); setScreen("upload"); }} style={{
             background: "none", border: "none",
             color: "#3a3858", fontSize: "11px",
             cursor: "pointer", fontFamily: "monospace",
-            letterSpacing: "1px", padding: "6px", textAlign: "center",
-          }}>
-            ← back
-          </button>
+            letterSpacing: "1px", padding: "6px",
+          }}>skip — no goals today</button>
         </div>
       </main>
     );
   }
 
   // INSIGHTS SCREEN
-  if (screen === "insights" && insights) {
+  if (insights) {
     const scoreColor = insights.dayScore?.score >= 7 ? "#6ee7c7"
       : insights.dayScore?.score >= 5 ? "#f5d06a" : "#f5a97f";
     return (
@@ -463,6 +449,7 @@ const carryForward = (goal) => {
         padding: "32px 20px 120px",
         maxWidth: "480px", margin: "0 auto",
       }}>
+        {/* Day score header */}
         <div style={{ marginBottom: "28px" }}>
           <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "3px", marginBottom: "8px" }}>
             FOCUS · YOUR DAY
@@ -484,8 +471,6 @@ const carryForward = (goal) => {
               </div>
             )}
           </div>
-
-          {/* Tagged summary */}
           <div style={{ display: "flex", gap: "8px", marginTop: "14px" }}>
             <div style={{
               flex: 1, background: "rgba(110,231,199,0.06)",
@@ -514,7 +499,6 @@ const carryForward = (goal) => {
               <div style={{ fontSize: "9px", color: "#3a3858", marginTop: "2px" }}>⚪ neutral</div>
             </div>
           </div>
-
           {insights.dayScore?.summary && (
             <p style={{ margin: "14px 0 0", fontSize: "13px", color: "#b8b0e0", lineHeight: 1.7, fontStyle: "italic" }}>
               {insights.dayScore.summary}
@@ -522,33 +506,67 @@ const carryForward = (goal) => {
           )}
         </div>
 
-        {/* Goals Review */}
-        {insights.goalReview && insights.goalReview.length > 0 && (
+        {/* Goals checklist — 100% user driven */}
+        {hasGoals && goals.filter(g => g.trim()).length > 0 && (
           <div style={{
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: "12px", padding: "20px", marginBottom: "14px",
+            background: "rgba(255,255,255,0.02)",
+            border: "1px solid rgba(255,255,255,0.07)",
+            borderRadius: "12px", padding: "20px",
+            marginBottom: "14px",
           }}>
-            <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "2px", marginBottom: "14px" }}>
+            <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "2px", marginBottom: "6px" }}>
               🎯 TODAY'S GOALS
             </div>
-            {insights.goalReview.map((g, i) => {
-              const config = STATUS_CONFIG[g.status] || STATUS_CONFIG.not_yet;
+            <p style={{ margin: "0 0 14px", fontSize: "11px", color: "#3a3858", fontFamily: "monospace" }}>
+              tap to mark complete
+            </p>
+            {goals.filter(g => g.trim()).map((goal, i) => {
+              const isDone = completedGoals.has(goal);
               return (
                 <div key={i} style={{
-                  padding: "12px 0",
-                  borderBottom: i < insights.goalReview.length - 1
-                    ? "1px solid rgba(255,255,255,0.05)" : "none",
+                  marginBottom: i < goals.filter(g => g.trim()).length - 1 ? "12px" : 0,
+                  paddingBottom: i < goals.filter(g => g.trim()).length - 1 ? "12px" : 0,
+                  borderBottom: i < goals.filter(g => g.trim()).length - 1
+                    ? "1px solid rgba(255,255,255,0.04)" : "none",
                 }}>
-                  <div style={{ display: "flex", gap: "10px", alignItems: "flex-start", marginBottom: "6px" }}>
-                    <span style={{ fontSize: "16px", flexShrink: 0 }}>{config.emoji}</span>
+                  <div
+                    onClick={() => {
+                      setCompletedGoals(prev => {
+                        const next = new Set(prev);
+                        next.has(goal) ? next.delete(goal) : next.add(goal);
+                        return next;
+                      });
+                    }}
+                    style={{
+                      display: "flex", gap: "12px",
+                      alignItems: "flex-start", cursor: "pointer",
+                    }}>
+                    <div style={{
+                      width: "22px", height: "22px", borderRadius: "6px",
+                      border: `2px solid ${isDone ? "#6ee7c7" : "rgba(255,255,255,0.2)"}`,
+                      background: isDone ? "rgba(110,231,199,0.15)" : "transparent",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      flexShrink: 0, marginTop: "1px",
+                      transition: "all 0.2s ease",
+                    }}>
+                      {isDone && <span style={{ color: "#6ee7c7", fontSize: "13px" }}>✓</span>}
+                    </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: "13px", color: "#ede8ff", marginBottom: "4px" }}>
-                        {g.goal}
+                      <div style={{
+                        fontSize: "13px",
+                        color: isDone ? "#6ee7c7" : "#c8c0f0",
+                        textDecoration: isDone ? "line-through" : "none",
+                        opacity: isDone ? 0.7 : 1,
+                        lineHeight: 1.5,
+                        transition: "all 0.2s ease",
+                      }}>
+                        {goal}
                       </div>
-                      <div style={{ fontSize: "11px", color: config.color, lineHeight: 1.5 }}>
-                        {g.message}
-                      </div>
+                      {isDone && (
+                        <div style={{ fontSize: "11px", color: "#6ee7c7", opacity: 0.6, marginTop: "3px" }}>
+                          Nice work! 🌿
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -557,6 +575,50 @@ const carryForward = (goal) => {
           </div>
         )}
 
+        {/* Carry forward — only unchecked goals */}
+        {hasGoals && goals.filter(g => g.trim()).some(g => !completedGoals.has(g)) && (
+          <div style={{
+            background: "rgba(160,152,200,0.08)",
+            border: "1px solid rgba(160,152,200,0.2)",
+            borderRadius: "12px", padding: "16px 20px",
+            marginBottom: "14px",
+          }}>
+            <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "2px", marginBottom: "10px" }}>
+              🔁 CARRY FORWARD?
+            </div>
+            <p style={{ margin: "0 0 12px", fontSize: "13px", color: "#a098c8", lineHeight: 1.6 }}>
+              These didn't quite make it today — want to try again tomorrow?
+            </p>
+            {goals.filter(g => g.trim() && !completedGoals.has(g)).map((goal, i) => {
+              const alreadyCarried = carriedGoals.includes(goal);
+              return (
+                <div key={i} style={{
+                  display: "flex", justifyContent: "space-between",
+                  alignItems: "center", gap: "10px", marginBottom: "8px",
+                }}>
+                  <span style={{ fontSize: "12px", color: "#c8c0f0", flex: 1 }}>
+                    💙 {goal}
+                  </span>
+                  <button
+                    onClick={() => alreadyCarried ? removeCarriedGoal(goal) : carryForward(goal)}
+                    style={{
+                      background: alreadyCarried ? "rgba(110,231,199,0.15)" : "rgba(160,152,200,0.1)",
+                      border: `1px solid ${alreadyCarried ? "rgba(110,231,199,0.4)" : "rgba(160,152,200,0.25)"}`,
+                      borderRadius: "20px", padding: "4px 12px",
+                      fontSize: "11px", fontFamily: "monospace",
+                      color: alreadyCarried ? "#6ee7c7" : "#a098c8",
+                      cursor: "pointer", flexShrink: 0,
+                      transition: "all 0.15s ease", whiteSpace: "nowrap",
+                    }}>
+                    {alreadyCarried ? "✓ added" : "+ tomorrow"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Focus window */}
         {insights.focusWindow && (
           <div style={{
             background: "rgba(110,231,199,0.06)",
@@ -591,6 +653,7 @@ const carryForward = (goal) => {
           </div>
         )}
 
+        {/* Interruption cost */}
         {insights.interruptionCost && (
           <div style={{
             background: "rgba(245,169,127,0.06)",
@@ -629,6 +692,7 @@ const carryForward = (goal) => {
           </div>
         )}
 
+        {/* Energy pattern */}
         {insights.energyPattern && (
           <div style={{
             background: "rgba(196,168,245,0.06)",
@@ -660,132 +724,7 @@ const carryForward = (goal) => {
           </div>
         )}
 
-        <div style={{
-          position: "fixed", bottom: 0, left: 0, right: 0,
-          padding: "16px 20px",
-          background: "rgba(12,12,20,0.95)",
-          borderTop: "1px solid rgba(255,255,255,0.06)",
-          backdropFilter: "blur(10px)",
-          display: "flex", flexDirection: "column", gap: "8px",
-        }}>
-{/* Goals — user marks complete */}
-        {insights.goalResults && insights.goalResults.length > 0 && (
-          <div style={{
-            background: "rgba(255,255,255,0.02)",
-            border: "1px solid rgba(255,255,255,0.07)",
-            borderRadius: "12px", padding: "20px",
-            marginBottom: "14px",
-          }}>
-            <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "2px", marginBottom: "6px" }}>
-              🎯 TODAY'S GOALS
-            </div>
-            <p style={{ margin: "0 0 14px", fontSize: "11px", color: "#3a3858", fontFamily: "monospace" }}>
-              tap to mark complete
-            </p>
-            {insights.goalResults.map((result, i) => {
-              const isDone = completedGoals.has(result.goal);
-              return (
-                <div key={i} style={{
-                  marginBottom: i < insights.goalResults.length - 1 ? "10px" : 0,
-                  paddingBottom: i < insights.goalResults.length - 1 ? "10px" : 0,
-                  borderBottom: i < insights.goalResults.length - 1
-                    ? "1px solid rgba(255,255,255,0.04)" : "none",
-                }}>
-                  <div
-                    onClick={() => toggleGoalComplete(result.goal)}
-                    style={{
-                      display: "flex", gap: "12px", alignItems: "flex-start",
-                      cursor: "pointer",
-                    }}>
-                    <div style={{
-                      width: "20px", height: "20px", borderRadius: "6px",
-                      border: `2px solid ${isDone ? "#6ee7c7" : "rgba(255,255,255,0.15)"}`,
-                      background: isDone ? "rgba(110,231,199,0.15)" : "transparent",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      flexShrink: 0, marginTop: "1px",
-                      transition: "all 0.2s ease",
-                    }}>
-                      {isDone && <span style={{ color: "#6ee7c7", fontSize: "12px" }}>✓</span>}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{
-                        fontSize: "13px",
-                        color: isDone ? "#6ee7c7" : "#c8c0f0",
-                        textDecoration: isDone ? "line-through" : "none",
-                        opacity: isDone ? 0.7 : 1,
-                        marginBottom: "3px",
-                        transition: "all 0.2s ease",
-                      }}>
-                        {result.goal}
-                      </div>
-                      {isDone
-                        ? <div style={{ fontSize: "11px", color: "#6ee7c7", opacity: 0.6 }}>Nice work! 🌿</div>
-                        : result.note && <div style={{ fontSize: "11px", color: "#7870a8", lineHeight: 1.5 }}>{result.note}</div>
-                      }
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Carry forward prompt — based on user's own completions */}
-        {insights.goalResults && insights.goalResults.some(r =>
-          !completedGoals.has(r.goal)
-        ) && (
-          <div style={{
-            background: "rgba(160,152,200,0.08)",
-            border: "1px solid rgba(160,152,200,0.2)",
-            borderRadius: "12px", padding: "16px 20px",
-            marginBottom: "14px",
-          }}>
-            <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "2px", marginBottom: "10px" }}>
-              🔁 CARRY FORWARD?
-            </div>
-            <p style={{ margin: "0 0 12px", fontSize: "13px", color: "#a098c8", lineHeight: 1.6 }}>
-              These didn't quite make it today — want to try again tomorrow?
-            </p>
-            {insights.goalResults
-              .filter(r => !completedGoals.has(r.goal))
-              .map((result, i) => {
-                const alreadyCarried = carriedGoals.includes(result.goal);
-                return (
-                  <div key={i} style={{
-                    display: "flex", justifyContent: "space-between",
-                    alignItems: "center", gap: "10px",
-                    marginBottom: "8px",
-                  }}>
-                    <span style={{ fontSize: "12px", color: "#c8c0f0", flex: 1 }}>
-                      💙 {result.goal}
-                    </span>
-                    <button
-                      onClick={() => alreadyCarried
-                        ? removeCarriedGoal(result.goal)
-                        : carryForward(result.goal)
-                      }
-                      style={{
-                        background: alreadyCarried
-                          ? "rgba(110,231,199,0.15)"
-                          : "rgba(160,152,200,0.1)",
-                        border: `1px solid ${alreadyCarried
-                          ? "rgba(110,231,199,0.4)"
-                          : "rgba(160,152,200,0.25)"}`,
-                        borderRadius: "20px", padding: "4px 12px",
-                        fontSize: "11px", fontFamily: "monospace",
-                        color: alreadyCarried ? "#6ee7c7" : "#a098c8",
-                        cursor: "pointer", flexShrink: 0,
-                        transition: "all 0.15s ease",
-                        whiteSpace: "nowrap",
-                      }}>
-                      {alreadyCarried ? "✓ added" : "+ tomorrow"}
-                    </button>
-                  </div>
-                );
-              })}
-          </div>
-        )}
-
+        {/* Bottom bar */}
         <div style={{
           position: "fixed", bottom: 0, left: 0, right: 0,
           padding: "16px 20px",
@@ -801,8 +740,7 @@ const carryForward = (goal) => {
             borderRadius: "10px", padding: "13px",
             color: "#6ee7c7", fontSize: "12px",
             cursor: "pointer", fontFamily: "monospace", letterSpacing: "1px",
-          }}>            + Log another day
-          </button>
+          }}>+ Log another day</button>
           <a href="https://ko-fi.com/focusjournal" target="_blank" rel="noopener noreferrer" style={{
             display: "block", textAlign: "center", padding: "8px",
             fontSize: "12px", color: "#f5d06a", fontFamily: "monospace",
@@ -815,13 +753,12 @@ const carryForward = (goal) => {
             letterSpacing: "1px", padding: "4px",
           }}>? show guide again</button>
         </div>
-        </div>
       </main>
     );
   }
 
   // UPLOAD SCREEN
-  if (screen === "upload") {
+  if (!preview && !loading && screen === "upload") {
     return (
       <main style={{
         minHeight: "100vh", background: "#0c0c14",
@@ -840,51 +777,37 @@ const carryForward = (goal) => {
           </p>
         </div>
 
-        {/* Goals summary if set */}
         {hasGoals && (
           <div style={{
-            background: "rgba(110,231,199,0.06)",
+            background: "rgba(110,231,199,0.05)",
             border: "1px solid rgba(110,231,199,0.15)",
-            borderRadius: "10px", padding: "14px 16px",
-            marginBottom: "20px",
+            borderRadius: "12px", padding: "14px 16px", marginBottom: "20px",
           }}>
             <div style={{ fontSize: "10px", color: "#3a7060", letterSpacing: "2px", marginBottom: "8px" }}>
               🎯 TODAY'S GOALS
             </div>
             {goals.filter(g => g.trim()).map((g, i) => (
-              <div key={i} style={{ fontSize: "12px", color: "#a098c8", marginBottom: "4px" }}>
-                · {g}
+              <div key={i} style={{
+                fontSize: "12px", color: "#a098c8",
+                marginBottom: "4px", display: "flex", gap: "8px",
+              }}>
+                <span style={{ color: "#6ee7c7" }}>→</span>
+                <span>{g}</span>
               </div>
             ))}
             <button onClick={() => setScreen("goals")} style={{
-              background: "none", border: "none", color: "#6860a0",
+              background: "none", border: "none", color: "#3a7060",
               fontSize: "10px", cursor: "pointer", fontFamily: "monospace",
               letterSpacing: "1px", padding: "4px 0 0", display: "block",
-            }}>
-              edit goals
-            </button>
+            }}>edit goals</button>
           </div>
-        )}
-
-        {/* Set goals button */}
-        {!hasGoals && (
-          <button onClick={() => setScreen("goals")} style={{
-            width: "100%", marginBottom: "16px",
-            background: "rgba(110,231,199,0.06)",
-            border: "1px dashed rgba(110,231,199,0.2)",
-            borderRadius: "10px", padding: "14px",
-            color: "#6ee7c7", fontSize: "13px",
-            cursor: "pointer", fontFamily: "monospace", letterSpacing: "1px",
-          }}>
-            🎯 Set today's goals (optional)
-          </button>
         )}
 
         <label style={{
           display: "block", background: "rgba(110,231,199,0.05)",
           border: "2px dashed rgba(110,231,199,0.25)",
-          borderRadius: "16px", padding: "40px 20px",
-          textAlign: "center", cursor: "pointer",
+          borderRadius: "16px", padding: "48px 20px",
+          textAlign: "center", cursor: "pointer", marginBottom: "14px",
         }}>
           <input type="file" accept="image/*" capture="environment"
             onChange={handlePhoto} style={{ display: "none" }} />
@@ -897,15 +820,29 @@ const carryForward = (goal) => {
           </div>
         </label>
 
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: "16px" }}>
+        {!hasGoals && (
+          <button onClick={() => setScreen("goals")} style={{
+            width: "100%",
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: "12px", padding: "14px",
+            fontSize: "13px", fontFamily: "monospace",
+            color: "#7870a8", cursor: "pointer",
+            letterSpacing: "1px", marginBottom: "14px",
+          }}>
+            🎯 What do you need to do today? →
+          </button>
+        )}
+
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
           <button onClick={reopenGuide} style={{
             background: "none", border: "none", color: "#3a3858",
             fontSize: "11px", cursor: "pointer", fontFamily: "monospace", letterSpacing: "1px",
           }}>? show guide</button>
           <a href="https://ko-fi.com/focusjournal" target="_blank" rel="noopener noreferrer" style={{
-            fontSize: "11px", color: "#f5d06a", fontFamily: "monospace",
+            fontSize: "11px", color: "#3a3858", fontFamily: "monospace",
             letterSpacing: "1px", textDecoration: "none", opacity: 0.7,
-          }}>☕ ko-fi</a>
+          }}>☕ buy me a coffee</a>
         </div>
 
         {error && (
@@ -996,9 +933,7 @@ const carryForward = (goal) => {
             borderRadius: "8px", padding: "9px",
             color: "#6ee7c7", fontSize: "11px",
             cursor: "pointer", fontFamily: "monospace", letterSpacing: "1px",
-          }}>
-            ✓ All entries look right — confirm all as neutral
-          </button>
+          }}>✓ All entries look right — confirm all as neutral</button>
         </div>
       )}
 
@@ -1007,6 +942,7 @@ const carryForward = (goal) => {
           const isEditing = editingId === entry.id;
           const isConfirmed = confirmed.has(entry.id);
           const isFlagged = entry.confidence === "low" && !isConfirmed;
+
           return (
             <div key={entry.id} style={{
               padding: "10px 20px",
@@ -1101,7 +1037,6 @@ const carryForward = (goal) => {
                 )}
               </div>
 
-              {/* Tag buttons */}
               <div style={{ display: "flex", gap: "6px", paddingLeft: "56px" }}>
                 {TAGS.map(t => (
                   <button key={t.id} onClick={() => setTag(entry.id, t.id)}
