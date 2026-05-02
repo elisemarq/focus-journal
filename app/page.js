@@ -172,6 +172,7 @@ export default function Home() {
   const handleAnalyse = async () => {
     setAnalysing(true);
     setError(null);
+    console.log("handleAnalyse called, user:", user);
     try {
       const res = await fetch("/api/analyse", {
         method: "POST",
@@ -554,7 +555,24 @@ export default function Home() {
                     onClick={() => {
                       setCompletedGoals(prev => {
                         const next = new Set(prev);
-                        next.has(goal) ? next.delete(goal) : next.add(goal);
+                        if (next.has(goal)) {
+                          next.delete(goal);
+                        } else {
+                          next.add(goal);
+                          // Remove from carried goals if it was carried over
+                          if (carriedGoals.includes(goal)) {
+                            const updated = carriedGoals.filter(g => g !== goal);
+                            setCarriedGoals(updated);
+                            if (updated.length === 0) {
+                              localStorage.removeItem("carried-goals");
+                            } else {
+                              localStorage.setItem("carried-goals", JSON.stringify({
+                                goals: updated,
+                                date: new Date().toISOString().split("T")[0],
+                              }));
+                            }
+                          }
+                        }
                         return next;
                       });
                     }}

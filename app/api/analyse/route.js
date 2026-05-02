@@ -12,13 +12,15 @@ const supabase = createClient(
 
 export async function POST(request) {
   try {
-    const { entries, date, goals } = await request.json();
+    const { entries, date, goals, userId } = await request.json();
 
     const entriesText = entries
       .map(e => `${e.time} — ${e.activity} [${e.tag}]`)
       .join("\n");
 
     console.log("Analysing entries:", entriesText);
+    console.log("User ID received:", userId);
+    console.log("Goals received:", goals);
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -84,6 +86,8 @@ Return ONLY raw JSON, no backticks:
       .from("journal_days")
       .insert({
         date: date || new Date().toISOString().split("T")[0],
+        date: date || new Date().toISOString().split("T")[0],
+        user_id: userId || null,
         day_score: insights.dayScore?.score || null,
         day_label: insights.dayScore?.label || null,
         day_summary: insights.dayScore?.summary || null,
