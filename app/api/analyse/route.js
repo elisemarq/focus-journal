@@ -15,7 +15,11 @@ export async function POST(request) {
     const { entries, date, goals, userId } = await request.json();
 
     const entriesText = entries
-      .map(e => `${e.time} — ${e.activity} [${e.tag}]`)
+      .map(e => {
+        let line = `${e.time} — ${e.activity} [${e.tag}]`;
+        if (e.triggerNote) line += ` (trigger: ${e.triggerNote})`;
+        return line;
+      })
       .join("\n");
 
     console.log("Analysing entries:", entriesText);
@@ -40,6 +44,10 @@ ${entriesText}
 Use the tags as ground truth — do not override what the user has told you.
 ONLY reference times and activities explicitly in the entries above.
 Never invent data not present in the entries.
+If any entries have trigger notes (shown as "trigger: ..."), 
+analyse them for patterns and include specific trigger insights.
+For example: "Your interruptions were mostly triggered by phone notifications" 
+or "Anxiety about the deadline triggered 3 of your 4 interruptions today."
 
 Return ONLY raw JSON, no backticks:
 {
@@ -53,7 +61,8 @@ Return ONLY raw JSON, no backticks:
   "interruptionCost": {
     "count": number of entries tagged interrupt,
     "triggers": ["list of activities tagged as interrupt"],
-    "insight": "one specific sentence about what interrupted them and when"
+    "insight": "one specific sentence about what interrupted them and when",
+    "triggerPattern": "if any trigger notes exist, identify the most common underlying cause — e.g. 'phone notifications', 'anxiety', 'colleagues'. If no trigger notes, return null."
   },
   "energyPattern": {
     "peakTime": "time range of deep work blocks",
@@ -106,12 +115,13 @@ Return ONLY raw JSON, no backticks:
       return Response.json({ insights, saved: false });
     }
 
-    const entryRows = entries.map(e => ({
+ const entryRows = entries.map(e => ({
       journal_day_id: dayData.id,
       time: e.time,
       activity: e.activity,
       tag: e.tag || "neutral",
       confidence: e.confidence || "high",
+      trigger_note: e.triggerNote || null,
     }));
 
     const { error: entriesError } = await supabase

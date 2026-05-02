@@ -49,6 +49,7 @@ export default function Home() {
   const [editingId, setEditingId] = useState(null);
   const [editTime, setEditTime] = useState("");
   const [editActivity, setEditActivity] = useState("");
+  const [triggerNotes, setTriggerNotes] = useState({});
   const [confirmed, setConfirmed] = useState(new Set());
   const [insights, setInsights] = useState(null);
   const [currentStep, setCurrentStep] = useState(0);
@@ -164,9 +165,21 @@ export default function Home() {
     setConfirmed(new Set(entries.map(e => e.id)));
   };
 
-  const setTag = (id, tag) => {
+ const setTag = (id, tag) => {
     setEntries(prev => prev.map(e => e.id === id ? { ...e, tag } : e));
     setConfirmed(prev => new Set([...prev, id]));
+    // Clear trigger note if untagging interruption
+    if (tag !== "interrupt") {
+      setTriggerNotes(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
+  };
+
+  const setTriggerNote = (id, note) => {
+    setTriggerNotes(prev => ({ ...prev, [id]: note }));
   };
 
   const handleAnalyse = async () => {
@@ -178,7 +191,10 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          entries,
+          entries: entries.map(e => ({
+            ...e,
+            triggerNote: triggerNotes[e.id] || null,
+          })),
           date: new Date().toISOString().split("T")[0],
           goals: goals.filter(g => g.trim()),
           userId: user?.id,
@@ -728,6 +744,21 @@ export default function Home() {
             <p style={{ margin: 0, fontSize: "12px", color: "#f5a97f", lineHeight: 1.6, opacity: 0.8, fontStyle: "italic" }}>
               "{insights.interruptionCost.insight}"
             </p>
+            {insights.interruptionCost.triggerPattern && (
+              <div style={{
+                marginTop: "10px",
+                background: "rgba(245,122,106,0.08)",
+                border: "1px solid rgba(245,122,106,0.15)",
+                borderRadius: "8px", padding: "10px 12px",
+              }}>
+                <div style={{ fontSize: "10px", color: "#7a5030", letterSpacing: "1px", marginBottom: "4px" }}>
+                  🔍 TRIGGER PATTERN
+                </div>
+                <p style={{ margin: 0, fontSize: "12px", color: "#f5a97f", lineHeight: 1.6 }}>
+                  {insights.interruptionCost.triggerPattern}
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -1115,6 +1146,26 @@ export default function Home() {
                   </button>
                 ))}
               </div>
+              {entry.tag === "interrupt" && (
+                <div style={{
+                  paddingLeft: "56px", marginTop: "8px",
+                }}>
+                  <input
+                    value={triggerNotes[entry.id] || ""}
+                    onChange={e => setTriggerNote(entry.id, e.target.value)}
+                    placeholder="What triggered this? (optional)"
+                    style={{
+                      width: "100%", background: "rgba(245,122,106,0.06)",
+                      border: "1px solid rgba(245,122,106,0.2)",
+                      borderRadius: "6px", padding: "6px 10px",
+                      color: "#f0a898", fontSize: "11px",
+                      fontFamily: "monospace", outline: "none",
+                      boxSizing: "border-box",
+                      caretColor: "#f57a6a",
+                    }}
+                  />
+                </div>
+              )}
             </div>
           );
         })}
