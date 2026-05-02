@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabase";
 
 const TAGS = [
   { id: "deep", emoji: "🟢", label: "Deep work" },
@@ -51,8 +52,27 @@ export default function Home() {
   const [confirmed, setConfirmed] = useState(new Set());
   const [insights, setInsights] = useState(null);
   const [currentStep, setCurrentStep] = useState(0);
+  const [user, setUser] = useState(null);
 
-  useEffect(() => {
+ useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        window.location.href = "/login";
+        return;
+      }
+      setUser(session.user);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (!session) {
+          window.location.href = "/login";
+        } else {
+          setUser(session.user);
+        }
+      }
+    );
+
     const dismissed = localStorage.getItem("guide-dismissed");
     setShowGuide(dismissed !== "true");
     const saved = localStorage.getItem("carried-goals");
@@ -160,6 +180,7 @@ export default function Home() {
           entries,
           date: new Date().toISOString().split("T")[0],
           goals: goals.filter(g => g.trim()),
+          userId: user?.id,
         }),
       });
       const data = await res.json();
@@ -839,6 +860,17 @@ export default function Home() {
             background: "none", border: "none", color: "#3a3858",
             fontSize: "11px", cursor: "pointer", fontFamily: "monospace", letterSpacing: "1px",
           }}>? show guide</button>
+          <button onClick={async () => {
+            await supabase.auth.signOut();
+            window.location.href = "/login";
+          }} style={{
+            background: "none", border: "none",
+            color: "#3a3858", fontSize: "11px",
+            cursor: "pointer", fontFamily: "monospace",
+            letterSpacing: "1px",
+          }}>
+            sign out
+          </button>
           <a href="https://ko-fi.com/focusjournal" target="_blank" rel="noopener noreferrer" style={{
             fontSize: "11px", color: "#3a3858", fontFamily: "monospace",
             letterSpacing: "1px", textDecoration: "none", opacity: 0.7,
