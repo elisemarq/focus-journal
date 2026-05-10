@@ -50,6 +50,11 @@ export default function Home() {
   const [editTime, setEditTime] = useState("");
   const [editActivity, setEditActivity] = useState("");
   const [triggerNotes, setTriggerNotes] = useState({});
+  const [voiceEntries, setVoiceEntries] = useState([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [voiceScreen, setVoiceScreen] = useState(false);
+  const [recordingStatus, setRecordingStatus] = useState("idle");
+  const [lastTranscript, setLastTranscript] = useState("");
   const [confirmed, setConfirmed] = useState(new Set());
   const [insights, setInsights] = useState(null);
   const [currentStep, setCurrentStep] = useState(0);
@@ -114,13 +119,20 @@ export default function Home() {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
+    reader.onerror = () => {
+      setError("Couldn't read that file — try again!");
+      setLoading(false);
+      setPreview(null);
+    };
     reader.onload = async (event) => {
       const base64 = event.target.result.split(",")[1];
       setPreview(event.target.result);
       setLoading(true);
       setError(null);
-      setEntries([]);
-      setConfirmed(new Set());
+      // Keep voice entries; drop any previous photo entries (and their confirmations/insights)
+      const voiceIds = new Set(entries.filter(en => en.source === "voice").map(en => en.id));
+      setEntries(prev => prev.filter(en => en.source === "voice"));
+      setConfirmed(prev => new Set([...prev].filter(id => voiceIds.has(id))));
       setInsights(null);
       try {
         const res = await fetch("/api/parse", {
@@ -130,10 +142,15 @@ export default function Home() {
         });
         const data = await res.json();
         if (data.error) throw new Error(data.error);
-        setEntries(data.entries.map((e, i) => ({
-          ...e, id: i, tag: "neutral",
-          confidence: e.time.includes("?") || e.activity.includes("[?]") ? "low" : "high",
-        })));
+        const photoBatchId = Date.now();
+        const photoEntries = data.entries.map((en, i) => ({
+          ...en,
+          id: `photo-${photoBatchId}-${i}`,
+          tag: "neutral",
+          source: "photo",
+          confidence: en.time.includes("?") || en.activity.includes("[?]") ? "low" : "high",
+        }));
+        setEntries(prev => [...prev.filter(en => en.source === "voice"), ...photoEntries]);
       } catch (err) {
         setError("Something went wrong — try again!");
         setPreview(null);
@@ -182,9 +199,71 @@ export default function Home() {
     setTriggerNotes(prev => ({ ...prev, [id]: note }));
   };
 
+  const startVoiceEntry = () => {
+    if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
+      alert("Voice recording isn't supported in this browser. Try Chrome!");
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    setIsRecording(true);
+    setRecordingStatus("listening");
+    setLastTranscript("");
+
+    recognition.onresult = async (event) => {
+      const transcript = event.results[0][0].transcript;
+      console.log("Heard:", transcript);
+      setLastTranscript(transcript);
+      setRecordingStatus("parsing");
+      setIsRecording(false);
+
+      try {
+        const res = await fetch("/api/voice", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transcript }),
+        });
+        const data = await res.json();
+        if (data.entry) {
+          const newEntry = {
+            ...data.entry,
+            id: `voice-${Date.now()}`,
+            tag: "neutral",
+            source: "voice",
+          };
+          setVoiceEntries(prev => [...prev, newEntry]);
+          setEntries(prev => [...prev, newEntry]);
+          setRecordingStatus("done");
+        }
+      } catch (err) {
+        console.error("Voice parse error:", err);
+        setRecordingStatus("error");
+      }
+    };
+
+    recognition.onerror = (event) => {
+      console.error("Speech error:", event.error);
+      setIsRecording(false);
+      setRecordingStatus("error");
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognition.start();
+  };
+
   const handleAnalyse = async () => {
     setAnalysing(true);
     setError(null);
+    console.log("Entries being analysed:", entries);
+    console.log("Entry count:", entries.length);
     console.log("handleAnalyse called, user:", user);
     try {
       const res = await fetch("/api/analyse", {
@@ -241,6 +320,9 @@ export default function Home() {
     setGoals(["", "", ""]);
     setScreen("upload");
     setCompletedGoals(new Set());
+    setVoiceEntries([]);
+    setRecordingStatus("idle");
+    setLastTranscript("");
   };
 
   const flaggedCount = entries.filter(e => e.confidence === "low" && !confirmed.has(e.id)).length;
@@ -369,6 +451,160 @@ export default function Home() {
           {analysing ? "Finding your patterns..." : "Reading your handwriting..."}
         </div>
         <div style={{ color: "#6860a0", fontSize: "11px" }}>This takes about 10 seconds</div>
+      </main>
+    );
+  }
+
+  // VOICE ENTRY SCREEN
+  if (voiceScreen) {
+    return (
+      <main style={{
+        minHeight: "100vh", background: "#0c0c14",
+        color: "#ede8ff", fontFamily: "monospace",
+        padding: "40px 20px", maxWidth: "480px", margin: "0 auto",
+        display: "flex", flexDirection: "column",
+      }}>
+        <div style={{ marginBottom: "28px" }}>
+          <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "3px", marginBottom: "8px" }}>
+            FOCUS JOURNAL · VOICE
+          </div>
+          <h1 style={{ margin: "0 0 8px", fontSize: "24px", fontWeight: "normal", color: "#6ee7c7" }}>
+            Speak your entries.
+          </h1>
+          <p style={{ margin: 0, fontSize: "13px", color: "#7870a8", lineHeight: 1.6 }}>
+            Tap the mic and say something like <em style={{ color: "#a098c8" }}>"10:30, meeting with Sarah"</em> or <em style={{ color: "#a098c8" }}>"just had lunch"</em>.
+          </p>
+        </div>
+
+        {/* Big mic button */}
+        <div style={{ textAlign: "center", marginBottom: "32px" }}>
+          <button
+            onClick={startVoiceEntry}
+            disabled={isRecording || recordingStatus === "parsing"}
+            style={{
+              width: "120px", height: "120px", borderRadius: "50%",
+              background: isRecording
+                ? "rgba(245,122,106,0.2)"
+                : "rgba(110,231,199,0.1)",
+              border: `3px solid ${isRecording ? "#f57a6a" : "rgba(110,231,199,0.4)"}`,
+              fontSize: "48px", cursor: isRecording ? "default" : "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              margin: "0 auto",
+              transition: "all 0.2s ease",
+              boxShadow: isRecording ? "0 0 30px rgba(245,122,106,0.3)" : "none",
+            }}>
+            🎤
+          </button>
+          <div style={{
+            marginTop: "16px", fontSize: "13px",
+            color: isRecording ? "#f57a6a"
+              : recordingStatus === "parsing" ? "#f5d06a"
+                : recordingStatus === "done" ? "#6ee7c7"
+                  : recordingStatus === "error" ? "#f57a6a"
+                    : "#3a3858",
+          }}>
+            {isRecording ? "Listening... speak now"
+              : recordingStatus === "parsing" ? "Parsing your entry..."
+                : recordingStatus === "done" ? "✓ Entry added!"
+                  : recordingStatus === "error" ? "Didn't catch that — try again"
+                    : "Tap to record an entry"}
+          </div>
+          {lastTranscript && (
+            <div style={{
+              marginTop: "8px", fontSize: "11px",
+              color: "#6860a0", fontStyle: "italic",
+            }}>
+              Heard: "{lastTranscript}"
+            </div>
+          )}
+        </div>
+
+        {/* Voice entries so far */}
+        {voiceEntries.length > 0 && (
+          <div style={{ marginBottom: "24px" }}>
+            <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "2px", marginBottom: "10px" }}>
+              {voiceEntries.length} ENTRIES LOGGED
+            </div>
+            {voiceEntries.map((entry, i) => (
+              <div key={entry.id} style={{
+                display: "flex", gap: "12px",
+                padding: "10px 0",
+                borderBottom: "1px solid rgba(255,255,255,0.04)",
+                alignItems: "flex-start",
+              }}>
+                <span style={{ color: "#6ee7c7", fontSize: "12px", minWidth: "44px" }}>
+                  {entry.time || "?"}
+                </span>
+                <span style={{ color: "#c8c0f0", fontSize: "13px", flex: 1 }}>
+                  {entry.activity}
+                </span>
+                <button
+                  onClick={() => {
+                    setVoiceEntries(prev => prev.filter(e => e.id !== entry.id));
+                    setEntries(prev => prev.filter(e => e.id !== entry.id));
+                  }}
+                  style={{
+                    background: "none", border: "none",
+                    color: "#3a3858", cursor: "pointer",
+                    fontSize: "14px", padding: "0 4px",
+                  }}>
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "auto" }}>
+          {voiceEntries.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <button
+                onClick={() => {
+                  setVoiceScreen(false);
+                }}
+                style={{
+                  width: "100%",
+                  background: "linear-gradient(135deg, #6ee7c7, #4ab880)",
+                  border: "none", borderRadius: "10px", padding: "14px",
+                  fontSize: "13px", fontFamily: "monospace",
+                  color: "#0c0c14", fontWeight: "bold",
+                  letterSpacing: "1px", cursor: "pointer",
+                }}>
+                Done — review & tag entries →
+              </button>
+              <button
+                onClick={() => {
+                  setVoiceScreen(false);
+                  setScreen("upload");
+                }}
+                style={{
+                  width: "100%",
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: "10px", padding: "12px",
+                  fontSize: "12px", fontFamily: "monospace",
+                  color: "#7870a8", cursor: "pointer",
+                  letterSpacing: "1px",
+                }}>
+                📸 Also snap my written journal
+              </button>
+            </div>
+          )}
+          <button
+            onClick={() => {
+              setVoiceScreen(false);
+              setScreen("upload");
+            }}
+            style={{
+              background: "none", border: "none",
+              color: "#3a3858", fontSize: "11px",
+              cursor: "pointer", fontFamily: "monospace",
+              letterSpacing: "1px", padding: "6px",
+            }}>
+            ← back to journal
+          </button>
+        </div>
       </main>
     );
   }
@@ -827,39 +1063,41 @@ export default function Home() {
     );
   }
 
-  // UPLOAD SCREEN
+  // UPLOAD SCREEN — journal hub
   if (!preview && !loading && screen === "upload") {
     return (
       <main style={{
         minHeight: "100vh", background: "#0c0c14",
         color: "#ede8ff", fontFamily: "monospace",
-        padding: "40px 20px", maxWidth: "480px", margin: "0 auto",
+        padding: "24px 20px 100px", maxWidth: "480px", margin: "0 auto",
       }}>
-        <div style={{ marginBottom: "32px" }}>
+        {/* Header */}
+        <div style={{ marginBottom: "24px" }}>
           <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "3px", marginBottom: "8px" }}>
             FOCUS JOURNAL
           </div>
-          <h1 style={{ margin: "0 0 8px", fontSize: "26px", fontWeight: "normal", color: "#6ee7c7" }}>
-            Snap your journal.
+          <h1 style={{ margin: "0 0 4px", fontSize: "24px", fontWeight: "normal", color: "#6ee7c7" }}>
+            Build your journal.
           </h1>
           <p style={{ color: "#7870a8", fontSize: "13px", margin: 0 }}>
-            We'll read your handwriting and pull out your day.
+            Add entries by photo, voice, or both.
           </p>
         </div>
 
+        {/* Goals summary */}
         {hasGoals && (
           <div style={{
             background: "rgba(110,231,199,0.05)",
             border: "1px solid rgba(110,231,199,0.15)",
-            borderRadius: "12px", padding: "14px 16px", marginBottom: "20px",
+            borderRadius: "12px", padding: "12px 16px", marginBottom: "16px",
           }}>
-            <div style={{ fontSize: "10px", color: "#3a7060", letterSpacing: "2px", marginBottom: "8px" }}>
+            <div style={{ fontSize: "10px", color: "#3a7060", letterSpacing: "2px", marginBottom: "6px" }}>
               🎯 TODAY'S GOALS
             </div>
             {goals.filter(g => g.trim()).map((g, i) => (
               <div key={i} style={{
                 fontSize: "12px", color: "#a098c8",
-                marginBottom: "4px", display: "flex", gap: "8px",
+                marginBottom: "3px", display: "flex", gap: "8px",
               }}>
                 <span style={{ color: "#6ee7c7" }}>→</span>
                 <span>{g}</span>
@@ -873,62 +1111,153 @@ export default function Home() {
           </div>
         )}
 
-        <label style={{
-          display: "block", background: "rgba(110,231,199,0.05)",
-          border: "2px dashed rgba(110,231,199,0.25)",
-          borderRadius: "16px", padding: "48px 20px",
-          textAlign: "center", cursor: "pointer", marginBottom: "14px",
-        }}>
-          <input type="file" accept="image/*" capture="environment"
-            onChange={handlePhoto} style={{ display: "none" }} />
-          <div style={{ fontSize: "48px", marginBottom: "16px" }}>📸</div>
-          <div style={{ color: "#6ee7c7", fontSize: "15px", marginBottom: "6px" }}>
-            Tap to photograph your journal
-          </div>
-          <div style={{ color: "#6860a0", fontSize: "11px" }}>
-            or choose an image from your gallery
-          </div>
-        </label>
-
-        {!hasGoals && (
-          <button onClick={() => setScreen("goals")} style={{
-            width: "100%",
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: "12px", padding: "14px",
-            fontSize: "13px", fontFamily: "monospace",
-            color: "#7870a8", cursor: "pointer",
-            letterSpacing: "1px", marginBottom: "14px",
+        {/* Input methods */}
+        <div style={{ display: "flex", gap: "10px", marginBottom: "16px" }}>
+          {/* Photo button */}
+          <label style={{
+            flex: 1, display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            background: "rgba(110,231,199,0.05)",
+            border: "2px dashed rgba(110,231,199,0.25)",
+            borderRadius: "14px", padding: "20px 12px",
+            textAlign: "center", cursor: "pointer",
+            gap: "8px",
           }}>
-            🎯 What do you need to do today? →
+            <input type="file" accept="image/*" capture="environment"
+              onChange={handlePhoto} style={{ display: "none" }} />
+            <div style={{ fontSize: "32px" }}>📸</div>
+            <div style={{ color: "#6ee7c7", fontSize: "12px", letterSpacing: "0.5px" }}>
+              Snap a page
+            </div>
+            <div style={{ color: "#3a3858", fontSize: "10px" }}>
+              photograph journal
+            </div>
+          </label>
+
+          {/* Voice button */}
+          <button
+            onClick={() => setVoiceScreen(true)}
+            style={{
+              flex: 1, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center",
+              background: "rgba(160,152,200,0.06)",
+              border: "2px dashed rgba(160,152,200,0.25)",
+              borderRadius: "14px", padding: "20px 12px",
+              textAlign: "center", cursor: "pointer",
+              gap: "8px",
+            }}>
+            <div style={{ fontSize: "32px" }}>🎤</div>
+            <div style={{ color: "#a098c8", fontSize: "12px", letterSpacing: "0.5px" }}>
+              Speak an entry
+            </div>
+            <div style={{ color: "#3a3858", fontSize: "10px" }}>
+              tap to dictate
+            </div>
           </button>
+        </div>
+
+        {/* Running entries list */}
+        {entries.length > 0 && (
+          <div style={{
+            background: "rgba(255,255,255,0.02)",
+            border: "1px solid rgba(255,255,255,0.06)",
+            borderRadius: "12px", padding: "16px",
+            marginBottom: "16px",
+          }}>
+            <div style={{
+              fontSize: "10px", color: "#6860a0",
+              letterSpacing: "2px", marginBottom: "12px",
+              display: "flex", justifyContent: "space-between",
+            }}>
+              <span>{entries.length} ENTRIES SO FAR</span>
+              <span style={{ color: "#3a3858" }}>tap Review to tag them</span>
+            </div>
+            {entries.map((entry, i) => (
+              <div key={entry.id || i} style={{
+                display: "flex", gap: "10px", alignItems: "flex-start",
+                padding: "7px 0",
+                borderBottom: i < entries.length - 1
+                  ? "1px solid rgba(255,255,255,0.03)" : "none",
+              }}>
+                <span style={{
+                  fontSize: "10px", color: "#3a3858",
+                  flexShrink: 0, marginTop: "2px",
+                }}>
+                  {entry.source === "voice" ? "🎤" : "📸"}
+                </span>
+                <span style={{ color: "#6ee7c7", fontSize: "12px", minWidth: "40px", flexShrink: 0 }}>
+                  {entry.time || "?"}
+                </span>
+                <span style={{ color: "#c8c0f0", fontSize: "12px", flex: 1, lineHeight: 1.4 }}>
+                  {entry.activity}
+                </span>
+                <button
+                  onClick={() => {
+                    setEntries(prev => prev.filter(e => e.id !== entry.id));
+                    setVoiceEntries(prev => prev.filter(e => e.id !== entry.id));
+                  }}
+                  style={{
+                    background: "none", border: "none",
+                    color: "#3a3858", cursor: "pointer",
+                    fontSize: "14px", padding: "0 2px", flexShrink: 0,
+                  }}>×</button>
+              </div>
+            ))}
+          </div>
         )}
 
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
-          <button onClick={reopenGuide} style={{
-            background: "none", border: "none", color: "#3a3858",
-            fontSize: "11px", cursor: "pointer", fontFamily: "monospace", letterSpacing: "1px",
-          }}>? show guide</button>
-          <button onClick={async () => {
-            await supabase.auth.signOut();
-            window.location.href = "/login";
-          }} style={{
-            background: "none", border: "none",
-            color: "#3a3858", fontSize: "11px",
-            cursor: "pointer", fontFamily: "monospace",
-            letterSpacing: "1px",
-          }}>
-            sign out
-          </button>
-          <a href="https://ko-fi.com/focusjournal" target="_blank" rel="noopener noreferrer" style={{
-            fontSize: "11px", color: "#3a3858", fontFamily: "monospace",
-            letterSpacing: "1px", textDecoration: "none", opacity: 0.7,
-          }}>☕ buy me a coffee</a>
+        {/* Bottom actions */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {!hasGoals && (
+            <button onClick={() => setScreen("goals")} style={{
+              width: "100%",
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: "12px", padding: "12px",
+              fontSize: "12px", fontFamily: "monospace",
+              color: "#7870a8", cursor: "pointer", letterSpacing: "1px",
+            }}>
+              🎯 Set today's goals →
+            </button>
+          )}
+
+          {entries.length > 0 && (
+            <button
+              onClick={() => setScreen("correction")}
+              style={{
+                width: "100%",
+                background: "linear-gradient(135deg, #6ee7c7, #4ab880)",
+                border: "none", borderRadius: "12px", padding: "14px",
+                fontSize: "13px", fontFamily: "monospace",
+                color: "#0c0c14", fontWeight: "bold",
+                cursor: "pointer", letterSpacing: "1px",
+              }}>
+              Review & tag {entries.length} entries →
+            </button>
+          )}
+
+          <div style={{ display: "flex", justifyContent: "center", gap: "20px", marginTop: "4px" }}>
+            <button onClick={reopenGuide} style={{
+              background: "none", border: "none", color: "#3a3858",
+              fontSize: "11px", cursor: "pointer", fontFamily: "monospace", letterSpacing: "1px",
+            }}>? show guide</button>
+            <a href="https://ko-fi.com/focusjournal" target="_blank" rel="noopener noreferrer" style={{
+              fontSize: "11px", color: "#3a3858", fontFamily: "monospace",
+              letterSpacing: "1px", textDecoration: "none", opacity: 0.7,
+            }}>☕ buy me a coffee</a>
+            <button onClick={async () => {
+              await supabase.auth.signOut();
+              window.location.href = "/login";
+            }} style={{
+              background: "none", border: "none", color: "#3a3858",
+              fontSize: "11px", cursor: "pointer", fontFamily: "monospace", letterSpacing: "1px",
+            }}>sign out</button>
+          </div>
         </div>
 
         {error && (
           <div style={{
-            marginTop: "20px", background: "rgba(245,122,106,0.1)",
+            marginTop: "16px", background: "rgba(245,122,106,0.1)",
             border: "1px solid rgba(245,122,106,0.3)",
             borderRadius: "8px", padding: "14px 16px",
             color: "#f57a6a", fontSize: "13px",
@@ -938,8 +1267,9 @@ export default function Home() {
     );
   }
 
-  // CORRECTION SCREEN
-  return (
+ // CORRECTION SCREEN
+  if (preview || entries.length > 0 || screen === "correction") {
+    return (
     <main style={{
       minHeight: "100vh", background: "#0c0c14",
       color: "#ede8ff", fontFamily: "monospace",
@@ -1207,4 +1537,5 @@ export default function Home() {
       </div>
     </main>
   );
+}
 }
