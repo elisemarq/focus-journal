@@ -1238,18 +1238,18 @@ export default function Home() {
 
           <div style={{ display: "flex", justifyContent: "center", gap: "20px", marginTop: "4px" }}>
             <button onClick={reopenGuide} style={{
-              background: "none", border: "none", color: "#3a3858",
+              background: "none", border: "none", color: "#6ee7c7",
               fontSize: "11px", cursor: "pointer", fontFamily: "monospace", letterSpacing: "1px",
             }}>? show guide</button>
             <a href="https://ko-fi.com/focusjournal" target="_blank" rel="noopener noreferrer" style={{
-              fontSize: "11px", color: "#3a3858", fontFamily: "monospace",
-              letterSpacing: "1px", textDecoration: "none", opacity: 0.7,
+              fontSize: "11px", color: "#6ee7c7", fontFamily: "monospace",
+              letterSpacing: "1px", textDecoration: "none",
             }}>☕ buy me a coffee</a>
             <button onClick={async () => {
               await supabase.auth.signOut();
               window.location.href = "/login";
             }} style={{
-              background: "none", border: "none", color: "#3a3858",
+              background: "none", border: "none", color: "#6ee7c7",
               fontSize: "11px", cursor: "pointer", fontFamily: "monospace", letterSpacing: "1px",
             }}>sign out</button>
           </div>
