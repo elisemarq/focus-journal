@@ -21,13 +21,14 @@ The user said: "${transcript}"
 
 Extract the time and activity from what they said.
 Times might be spoken as "six thirty", "half past nine", "around 2pm", "just after lunch" etc.
-Convert spoken times to numeric format like "6:30", "9:30", "2:00".
+Convert spoken times to numeric format with am/pm: "6:30am", "9:30am", "2:00pm".
+Always include "am" or "pm" — infer from context (lunch = pm, morning routines = am, "tonight" = pm, etc.).
 If no time is mentioned, return null for time.
-If the time is vague like "just after lunch", make a reasonable guess like "12:30".
+If the time is vague like "just after lunch", make a reasonable guess like "12:30pm".
 
 Return ONLY raw JSON, no backticks:
 {
-  "time": "6:30" or null,
+  "time": "6:30am" or "2:00pm" or null,
   "activity": "clean description of what they were doing",
   "confidence": "high" or "low"
 }`,

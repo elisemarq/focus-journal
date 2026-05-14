@@ -8,6 +8,23 @@ const TAGS = [
   { id: "neutral", emoji: "⚪", label: "Neutral" },
 ];
 
+// Treat "1:00"–"7:59" without am/pm as afternoon — matches typical journaling habits.
+const entryTimeToMinutes = (t) => {
+  if (!t) return Number.POSITIVE_INFINITY;
+  const m = String(t).match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+  if (!m) return Number.POSITIVE_INFINITY;
+  let h = Number(m[1]);
+  const mins = Number(m[2]);
+  const meridiem = m[3]?.toLowerCase();
+  if (meridiem === "pm" && h < 12) h += 12;
+  else if (meridiem === "am" && h === 12) h = 0;
+  else if (!meridiem && h >= 1 && h <= 7) h += 12;
+  return h * 60 + mins;
+};
+
+const sortEntriesByTime = (entries) =>
+  [...entries].sort((a, b) => entryTimeToMinutes(a.time) - entryTimeToMinutes(b.time));
+
 const STEPS = [
   {
     icon: "📓",
@@ -18,13 +35,13 @@ const STEPS = [
   {
     icon: "✍️",
     title: "Write time + activity",
-    description: "Each entry is just a time and a short description. Write it the moment you switch tasks — before you forget!",
+    description: "Each entry is a time and a short description. Add AM or PM (or use 24-hour time like 14:30) so the order's clear — write it the moment you switch tasks, before you forget!",
     example: [
-      "9:00 — emails",
-      "9:45 — working on report",
-      "10:30 — meeting with Sarah",
-      "11:15 — back to report",
-      "12:00 — lunch",
+      "9:00am — emails",
+      "9:45am — working on report",
+      "12:00pm — lunch",
+      "1:30pm — meeting with Sarah",
+      "3:15pm — back to report",
     ],
   },
   {
@@ -55,6 +72,8 @@ export default function Home() {
   const [voiceScreen, setVoiceScreen] = useState(false);
   const [recordingStatus, setRecordingStatus] = useState("idle");
   const [lastTranscript, setLastTranscript] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [goalsReviewed, setGoalsReviewed] = useState(false);
   const [confirmed, setConfirmed] = useState(new Set());
   const [insights, setInsights] = useState(null);
   const [currentStep, setCurrentStep] = useState(0);
@@ -262,6 +281,7 @@ export default function Home() {
   const handleAnalyse = async () => {
     setAnalysing(true);
     setError(null);
+    setGoalsReviewed(false);
     console.log("Entries being analysed:", entries);
     console.log("Entry count:", entries.length);
     console.log("handleAnalyse called, user:", user);
@@ -270,7 +290,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          entries: entries.map(e => ({
+          entries: sortEntriesByTime(entries).map(e => ({
             ...e,
             triggerNote: triggerNotes[e.id] || null,
           })),
@@ -311,6 +331,30 @@ export default function Home() {
     }
   };
 
+  const toggleGoalComplete = (goal) => {
+    setCompletedGoals(prev => {
+      const next = new Set(prev);
+      if (next.has(goal)) {
+        next.delete(goal);
+      } else {
+        next.add(goal);
+        if (carriedGoals.includes(goal)) {
+          const updated = carriedGoals.filter(g => g !== goal);
+          setCarriedGoals(updated);
+          if (updated.length === 0) {
+            localStorage.removeItem("carried-goals");
+          } else {
+            localStorage.setItem("carried-goals", JSON.stringify({
+              goals: updated,
+              date: new Date().toISOString().split("T")[0],
+            }));
+          }
+        }
+      }
+      return next;
+    });
+  };
+
   const reset = () => {
     setPreview(null);
     setEntries([]);
@@ -323,6 +367,7 @@ export default function Home() {
     setVoiceEntries([]);
     setRecordingStatus("idle");
     setLastTranscript("");
+    setGoalsReviewed(false);
   };
 
   const flaggedCount = entries.filter(e => e.confidence === "low" && !confirmed.has(e.id)).length;
@@ -649,38 +694,71 @@ export default function Home() {
         </div>
 
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "14px", marginBottom: "32px" }}>
-          {[0, 1, 2].map((i) => (
-            <div key={i} style={{
-              background: "rgba(255,255,255,0.03)",
-              border: `1px solid ${goals[i] ? "rgba(110,231,199,0.3)" : "rgba(255,255,255,0.06)"}`,
-              borderRadius: "12px", padding: "16px 20px",
-              transition: "border-color 0.2s ease",
-            }}>
-              <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "2px", marginBottom: "8px" }}>
-                GOAL {i + 1} {i > 0 ? "(optional)" : ""}
+          {[0, 1, 2].map((i) => {
+            const goalText = goals[i];
+            const isDone = goalText.trim() && completedGoals.has(goalText);
+            return (
+              <div key={i} style={{
+                background: "rgba(255,255,255,0.03)",
+                border: `1px solid ${isDone ? "rgba(110,231,199,0.4)" : goalText ? "rgba(110,231,199,0.3)" : "rgba(255,255,255,0.06)"}`,
+                borderRadius: "12px", padding: "16px 20px",
+                transition: "border-color 0.2s ease",
+              }}>
+                <div style={{
+                  fontSize: "10px", color: "#6860a0", letterSpacing: "2px", marginBottom: "8px",
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                }}>
+                  <span>GOAL {i + 1} {i > 0 ? "(optional)" : ""}</span>
+                  {goalText.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => toggleGoalComplete(goalText)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: "6px",
+                        background: "none", border: "none",
+                        color: isDone ? "#6ee7c7" : "#6860a0",
+                        fontSize: "10px", cursor: "pointer",
+                        fontFamily: "monospace", letterSpacing: "1px",
+                        padding: 0,
+                      }}>
+                      <span style={{
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        width: "18px", height: "18px", borderRadius: "5px",
+                        border: `2px solid ${isDone ? "#6ee7c7" : "rgba(255,255,255,0.2)"}`,
+                        background: isDone ? "rgba(110,231,199,0.15)" : "transparent",
+                        transition: "all 0.2s ease",
+                      }}>
+                        {isDone && <span style={{ color: "#6ee7c7", fontSize: "11px" }}>✓</span>}
+                      </span>
+                      {isDone ? "DONE" : "MARK DONE"}
+                    </button>
+                  )}
+                </div>
+                <input
+                  value={goalText}
+                  onChange={e => {
+                    const newGoals = [...goals];
+                    newGoals[i] = e.target.value;
+                    setGoals(newGoals);
+                  }}
+                  placeholder={
+                    i === 0 ? "e.g. Finish the project proposal" :
+                    i === 1 ? "e.g. Reply to all pending emails" :
+                    "e.g. Take a proper lunch break"
+                  }
+                  style={{
+                    width: "100%", background: "transparent",
+                    border: "none", outline: "none",
+                    color: isDone ? "#6ee7c7" : "#ede8ff", fontSize: "14px",
+                    fontFamily: "monospace", lineHeight: 1.5,
+                    boxSizing: "border-box", caretColor: "#6ee7c7",
+                    textDecoration: isDone ? "line-through" : "none",
+                    opacity: isDone ? 0.7 : 1,
+                  }}
+                />
               </div>
-              <input
-                value={goals[i]}
-                onChange={e => {
-                  const newGoals = [...goals];
-                  newGoals[i] = e.target.value;
-                  setGoals(newGoals);
-                }}
-                placeholder={
-                  i === 0 ? "e.g. Finish the project proposal" :
-                  i === 1 ? "e.g. Reply to all pending emails" :
-                  "e.g. Take a proper lunch break"
-                }
-                style={{
-                  width: "100%", background: "transparent",
-                  border: "none", outline: "none",
-                  color: "#ede8ff", fontSize: "14px",
-                  fontFamily: "monospace", lineHeight: 1.5,
-                  boxSizing: "border-box", caretColor: "#6ee7c7",
-                }}
-              />
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -707,6 +785,151 @@ export default function Home() {
             cursor: "pointer", fontFamily: "monospace",
             letterSpacing: "1px", padding: "6px",
           }}>skip — no goals today</button>
+        </div>
+      </main>
+    );
+  }
+
+  // JOURNAL SCREEN — read-only view of today's entries
+  if (screen === "journal") {
+    const sortedEntries = sortEntriesByTime(entries);
+    return (
+      <main style={{
+        minHeight: "100vh", background: "#0c0c14",
+        color: "#ede8ff", fontFamily: "monospace",
+        padding: "32px 20px 100px", maxWidth: "480px", margin: "0 auto",
+      }}>
+        <div style={{ marginBottom: "24px" }}>
+          <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "3px", marginBottom: "8px" }}>
+            FOCUS JOURNAL · TODAY
+          </div>
+          <h1 style={{ margin: "0 0 6px", fontSize: "24px", fontWeight: "normal", color: "#6ee7c7" }}>
+            Your day so far.
+          </h1>
+          <p style={{ margin: 0, fontSize: "13px", color: "#7870a8", lineHeight: 1.6 }}>
+            {entries.length === 0
+              ? "No entries yet — add some from the hub."
+              : `${entries.length} ${entries.length === 1 ? "entry" : "entries"} logged.`}
+          </p>
+        </div>
+
+        {hasGoals && (() => {
+          const leftover = goals.filter(g => g.trim() && !completedGoals.has(g));
+          const allDone = leftover.length === 0;
+          return (
+            <div style={{
+              background: "rgba(110,231,199,0.05)",
+              border: "1px solid rgba(110,231,199,0.15)",
+              borderRadius: "12px", padding: "12px 16px", marginBottom: "16px",
+            }}>
+              <div style={{
+                fontSize: "10px", color: "#3a7060", letterSpacing: "2px", marginBottom: "8px",
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+              }}>
+                <span>{allDone ? "🌿 GOALS — ALL DONE" : `🎯 GOALS LEFT (${leftover.length})`}</span>
+                <button
+                  type="button"
+                  onClick={() => setScreen("goals")}
+                  style={{
+                    background: "none", border: "none", color: "#3a7060",
+                    fontSize: "10px", cursor: "pointer", fontFamily: "monospace",
+                    letterSpacing: "1px", padding: 0,
+                  }}>
+                  edit →
+                </button>
+              </div>
+              {allDone ? (
+                <div style={{ fontSize: "12px", color: "#6ee7c7", opacity: 0.8, padding: "2px 0" }}>
+                  Nice work — every goal checked off for today.
+                </div>
+              ) : (
+                leftover.map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => toggleGoalComplete(g)}
+                    style={{
+                      width: "100%", textAlign: "left",
+                      display: "flex", gap: "10px", alignItems: "center",
+                      background: "none", border: "none",
+                      padding: "4px 0",
+                      cursor: "pointer", fontFamily: "monospace",
+                    }}>
+                    <span style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: "18px", height: "18px", borderRadius: "5px",
+                      border: "2px solid rgba(110,231,199,0.4)",
+                      flexShrink: 0,
+                    }} />
+                    <span style={{ fontSize: "12px", color: "#a098c8", flex: 1 }}>{g}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          );
+        })()}
+
+        {entries.length > 0 && (
+          <div style={{
+            background: "rgba(255,255,255,0.02)",
+            border: "1px solid rgba(255,255,255,0.06)",
+            borderRadius: "12px", padding: "16px", marginBottom: "20px",
+          }}>
+            {sortedEntries.map((entry, i) => (
+              <div key={entry.id} style={{
+                display: "flex", gap: "12px", alignItems: "flex-start",
+                padding: "10px 0",
+                borderBottom: i < sortedEntries.length - 1
+                  ? "1px solid rgba(255,255,255,0.04)" : "none",
+              }}>
+                <span style={{ fontSize: "12px", flexShrink: 0, marginTop: "1px" }}>
+                  {entry.source === "voice" ? "🎤" : "📸"}
+                </span>
+                <span style={{
+                  color: "#6ee7c7", fontSize: "13px",
+                  minWidth: "44px", flexShrink: 0,
+                }}>
+                  {entry.time || "?"}
+                </span>
+                <span style={{ color: "#c8c0f0", fontSize: "13px", flex: 1, lineHeight: 1.5 }}>
+                  {entry.activity}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {entries.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setScreen("correction")}
+              style={{
+                width: "100%",
+                background: "rgba(110,231,199,0.1)",
+                border: "1px solid rgba(110,231,199,0.3)",
+                borderRadius: "10px", padding: "14px",
+                fontSize: "13px", fontFamily: "monospace",
+                color: "#6ee7c7", cursor: "pointer",
+                letterSpacing: "1px",
+              }}>
+              ✎ Edit & tag entries
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => { setPreview(null); setScreen("upload"); }}
+            style={{
+              width: "100%",
+              background: "transparent",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: "10px", padding: "12px",
+              fontSize: "12px", fontFamily: "monospace",
+              color: "#7870a8", cursor: "pointer",
+              letterSpacing: "1px",
+            }}>
+            ← back to hub
+          </button>
         </div>
       </main>
     );
@@ -866,8 +1089,26 @@ export default function Home() {
           </div>
         )}
 
-        {/* Carry forward — only unchecked goals */}
-        {hasGoals && goals.filter(g => g.trim()).some(g => !completedGoals.has(g)) && (
+        {/* Gate carry-forward behind explicit review confirmation */}
+        {hasGoals && goals.filter(g => g.trim()).length > 0 && !goalsReviewed && (
+          <button
+            type="button"
+            onClick={() => setGoalsReviewed(true)}
+            style={{
+              width: "100%",
+              background: "rgba(110,231,199,0.08)",
+              border: "1px solid rgba(110,231,199,0.25)",
+              borderRadius: "12px", padding: "14px",
+              fontSize: "13px", fontFamily: "monospace",
+              color: "#6ee7c7", cursor: "pointer",
+              letterSpacing: "1px", marginBottom: "14px",
+            }}>
+            ✓ I've reviewed my goals →
+          </button>
+        )}
+
+        {/* Carry forward — only unchecked goals, only after explicit review */}
+        {hasGoals && goalsReviewed && goals.filter(g => g.trim()).some(g => !completedGoals.has(g)) && (
           <div style={{
             background: "rgba(160,152,200,0.08)",
             border: "1px solid rgba(160,152,200,0.2)",
@@ -878,7 +1119,7 @@ export default function Home() {
               🔁 CARRY FORWARD?
             </div>
             <p style={{ margin: "0 0 12px", fontSize: "13px", color: "#a098c8", lineHeight: 1.6 }}>
-              These didn't quite make it today — want to try again tomorrow?
+              Want to bring any of these into tomorrow?
             </p>
             {goals.filter(g => g.trim() && !completedGoals.has(g)).map((goal, i) => {
               const alreadyCarried = carriedGoals.includes(goal);
@@ -1072,44 +1313,172 @@ export default function Home() {
         padding: "24px 20px 100px", maxWidth: "480px", margin: "0 auto",
       }}>
         {/* Header */}
-        <div style={{ marginBottom: "24px" }}>
-          <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "3px", marginBottom: "8px" }}>
-            FOCUS JOURNAL
+        <div style={{
+          marginBottom: "24px",
+          display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+        }}>
+          <div>
+            <div style={{ fontSize: "10px", color: "#6860a0", letterSpacing: "3px", marginBottom: "8px" }}>
+              FOCUS JOURNAL
+            </div>
+            <h1 style={{ margin: "0 0 4px", fontSize: "24px", fontWeight: "normal", color: "#6ee7c7" }}>
+              Build your journal.
+            </h1>
+            <p style={{ color: "#7870a8", fontSize: "13px", margin: 0 }}>
+              Add entries by photo, voice, or both.
+            </p>
           </div>
-          <h1 style={{ margin: "0 0 4px", fontSize: "24px", fontWeight: "normal", color: "#6ee7c7" }}>
-            Build your journal.
-          </h1>
-          <p style={{ color: "#7870a8", fontSize: "13px", margin: 0 }}>
-            Add entries by photo, voice, or both.
-          </p>
+          <button
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            aria-label="Open menu"
+            style={{
+              background: "rgba(110,231,199,0.06)",
+              border: "1px solid rgba(110,231,199,0.2)",
+              borderRadius: "10px", padding: "8px 12px",
+              fontSize: "18px", color: "#6ee7c7",
+              cursor: "pointer", fontFamily: "monospace",
+              lineHeight: 1, flexShrink: 0,
+            }}>
+            ☰
+          </button>
         </div>
 
-        {/* Goals summary */}
-        {hasGoals && (
-          <div style={{
-            background: "rgba(110,231,199,0.05)",
-            border: "1px solid rgba(110,231,199,0.15)",
-            borderRadius: "12px", padding: "12px 16px", marginBottom: "16px",
-          }}>
-            <div style={{ fontSize: "10px", color: "#3a7060", letterSpacing: "2px", marginBottom: "6px" }}>
-              🎯 TODAY'S GOALS
-            </div>
-            {goals.filter(g => g.trim()).map((g, i) => (
-              <div key={i} style={{
-                fontSize: "12px", color: "#a098c8",
-                marginBottom: "3px", display: "flex", gap: "8px",
+        {/* Menu overlay */}
+        {menuOpen && (
+          <div
+            onClick={() => setMenuOpen(false)}
+            style={{
+              position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+              zIndex: 50, display: "flex", justifyContent: "flex-end",
+              padding: "70px 20px 0",
+            }}>
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: "#16161e",
+                border: "1px solid rgba(110,231,199,0.2)",
+                borderRadius: "12px", padding: "6px",
+                minWidth: "220px", height: "fit-content",
+                boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
               }}>
-                <span style={{ color: "#6ee7c7" }}>→</span>
-                <span>{g}</span>
-              </div>
-            ))}
-            <button onClick={() => setScreen("goals")} style={{
-              background: "none", border: "none", color: "#3a7060",
-              fontSize: "10px", cursor: "pointer", fontFamily: "monospace",
-              letterSpacing: "1px", padding: "4px 0 0", display: "block",
-            }}>edit goals</button>
+              <button
+                type="button"
+                onClick={() => { setMenuOpen(false); setScreen("goals"); }}
+                style={{
+                  width: "100%", textAlign: "left",
+                  background: "none", border: "none",
+                  padding: "12px 14px", borderRadius: "8px",
+                  fontSize: "13px", color: "#6ee7c7",
+                  fontFamily: "monospace", cursor: "pointer",
+                  letterSpacing: "0.5px",
+                }}>
+                🎯 Today's goals
+              </button>
+              <button
+                type="button"
+                onClick={() => { setMenuOpen(false); setScreen("journal"); }}
+                style={{
+                  width: "100%", textAlign: "left",
+                  background: "none", border: "none",
+                  padding: "12px 14px", borderRadius: "8px",
+                  fontSize: "13px", color: "#6ee7c7",
+                  fontFamily: "monospace", cursor: "pointer",
+                  letterSpacing: "0.5px",
+                }}>
+                📓 Today's journal
+              </button>
+              <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", margin: "4px 8px" }} />
+              <button
+                type="button"
+                onClick={() => { setMenuOpen(false); reopenGuide(); }}
+                style={{
+                  width: "100%", textAlign: "left",
+                  background: "none", border: "none",
+                  padding: "12px 14px", borderRadius: "8px",
+                  fontSize: "12px", color: "#7870a8",
+                  fontFamily: "monospace", cursor: "pointer",
+                  letterSpacing: "0.5px",
+                }}>
+                ? show guide
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setMenuOpen(false);
+                  await supabase.auth.signOut();
+                  window.location.href = "/login";
+                }}
+                style={{
+                  width: "100%", textAlign: "left",
+                  background: "none", border: "none",
+                  padding: "12px 14px", borderRadius: "8px",
+                  fontSize: "12px", color: "#7870a8",
+                  fontFamily: "monospace", cursor: "pointer",
+                  letterSpacing: "0.5px",
+                }}>
+                sign out
+              </button>
+            </div>
           </div>
         )}
+
+        {/* Goals summary — leftover goals with inline tap-to-complete */}
+        {hasGoals && (() => {
+          const leftover = goals.filter(g => g.trim() && !completedGoals.has(g));
+          const allDone = leftover.length === 0;
+          return (
+            <div style={{
+              background: "rgba(110,231,199,0.05)",
+              border: "1px solid rgba(110,231,199,0.15)",
+              borderRadius: "12px", padding: "12px 16px", marginBottom: "16px",
+            }}>
+              <div style={{
+                fontSize: "10px", color: "#3a7060", letterSpacing: "2px", marginBottom: "8px",
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+              }}>
+                <span>{allDone ? "🌿 GOALS — ALL DONE" : `🎯 GOALS LEFT (${leftover.length})`}</span>
+                <button
+                  type="button"
+                  onClick={() => setScreen("goals")}
+                  style={{
+                    background: "none", border: "none", color: "#3a7060",
+                    fontSize: "10px", cursor: "pointer", fontFamily: "monospace",
+                    letterSpacing: "1px", padding: 0,
+                  }}>
+                  edit →
+                </button>
+              </div>
+              {allDone ? (
+                <div style={{ fontSize: "12px", color: "#6ee7c7", opacity: 0.8, padding: "2px 0" }}>
+                  Nice work — every goal checked off for today.
+                </div>
+              ) : (
+                leftover.map((g, i) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => toggleGoalComplete(g)}
+                    style={{
+                      width: "100%", textAlign: "left",
+                      display: "flex", gap: "10px", alignItems: "center",
+                      background: "none", border: "none",
+                      padding: "4px 0",
+                      cursor: "pointer", fontFamily: "monospace",
+                    }}>
+                    <span style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: "18px", height: "18px", borderRadius: "5px",
+                      border: "2px solid rgba(110,231,199,0.4)",
+                      flexShrink: 0,
+                    }} />
+                    <span style={{ fontSize: "12px", color: "#a098c8", flex: 1 }}>{g}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          );
+        })()}
 
         {/* Input methods */}
         <div style={{ display: "flex", gap: "10px", marginBottom: "16px" }}>
@@ -1172,11 +1541,11 @@ export default function Home() {
               <span>{entries.length} ENTRIES SO FAR</span>
               <span style={{ color: "#3a3858" }}>tap Review to tag them</span>
             </div>
-            {entries.map((entry, i) => (
+            {sortEntriesByTime(entries).map((entry, i, arr) => (
               <div key={entry.id || i} style={{
                 display: "flex", gap: "10px", alignItems: "flex-start",
                 padding: "7px 0",
-                borderBottom: i < entries.length - 1
+                borderBottom: i < arr.length - 1
                   ? "1px solid rgba(255,255,255,0.03)" : "none",
               }}>
                 <span style={{
@@ -1349,7 +1718,7 @@ export default function Home() {
       )}
 
       <div style={{ padding: "4px 0 100px" }}>
-        {entries.map((entry) => {
+        {sortEntriesByTime(entries).map((entry) => {
           const isEditing = editingId === entry.id;
           const isConfirmed = confirmed.has(entry.id);
           const isFlagged = entry.confidence === "low" && !isConfirmed;
@@ -1527,6 +1896,18 @@ export default function Home() {
             ? "ANALYSE MY DAY →"
             : `CONFIRM ${entries.length - confirmed.size} MORE TO CONTINUE`}
         </button>
+        <button
+          type="button"
+          onClick={() => { setPreview(null); setScreen("upload"); }}
+          style={{
+            width: "100%", marginTop: "8px",
+            background: "rgba(110,231,199,0.06)",
+            border: "1px solid rgba(110,231,199,0.2)",
+            borderRadius: "8px", padding: "10px",
+            fontSize: "12px", fontFamily: "monospace",
+            color: "#6ee7c7", cursor: "pointer",
+            letterSpacing: "1px",
+          }}>+ add more entries</button>
         <button onClick={reset} style={{
           width: "100%", marginTop: "8px",
           background: "transparent", border: "none",

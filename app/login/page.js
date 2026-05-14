@@ -17,7 +17,7 @@ export default function Login() {
         email: email.trim(),
         options: {
           emailRedirectTo: process.env.NODE_ENV === "development"
-            ? "http://localhost:3000"
+            ? window.location.origin
             : "https://journal.pondering.life",
         },
       });
